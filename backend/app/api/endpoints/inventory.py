@@ -16,6 +16,12 @@ class ActiveBatchResponse(BaseModel):
     id: int
     product_id: int
     product_name: str
+    generic_name: Optional[str] = None
+    brand: Optional[str] = None
+    barcode: Optional[str] = None
+    sku: Optional[str] = None
+    pack_size: Optional[str] = None
+    image_url: Optional[str] = None
     batch_number: str
     expiry_date: date
     quantity_available: int
@@ -30,31 +36,44 @@ def get_active_batches(
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
-    # Fetch all batches that have quantity > 0 and are not expired
-    # We also join with product to get product_name which is very useful for POS
+    # Fetch all active batches that have quantity > 0 and are not expired
+    # Join with product to get product details for POS search & billing
     today = date.today()
     results = db.query(
         InventoryBatch.id,
         InventoryBatch.product_id,
         Product.name.label("product_name"),
+        Product.generic_name.label("generic_name"),
+        Product.brand.label("brand"),
+        Product.barcode.label("barcode"),
+        Product.sku.label("sku"),
+        Product.pack_size.label("pack_size"),
+        Product.image_url.label("image_url"),
         InventoryBatch.batch_number,
         InventoryBatch.expiry_date,
         InventoryBatch.quantity_available,
         InventoryBatch.mrp,
         InventoryBatch.selling_price
     ).join(Product, Product.id == InventoryBatch.product_id)\
+     .filter(Product.is_active == True)\
+     .filter(Product.is_archived == False)\
      .filter(InventoryBatch.quantity_available > 0)\
      .filter(InventoryBatch.expiry_date >= today)\
+     .order_by(Product.name.asc(), InventoryBatch.expiry_date.asc())\
      .all()
     
-    # Map raw tuple results to dictionary to match the schema
-    # SQLAlchemy returns Row objects which can be unpacked
     batches = []
     for row in results:
         batches.append({
             "id": row.id,
             "product_id": row.product_id,
             "product_name": row.product_name,
+            "generic_name": row.generic_name,
+            "brand": row.brand,
+            "barcode": row.barcode,
+            "sku": row.sku,
+            "pack_size": row.pack_size,
+            "image_url": row.image_url,
             "batch_number": row.batch_number,
             "expiry_date": row.expiry_date,
             "quantity_available": row.quantity_available,

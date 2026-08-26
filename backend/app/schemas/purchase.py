@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import date, datetime
 from app.schemas.supplier import Supplier
+from app.schemas.product import ProductResponse
 
 class PurchaseItemBase(BaseModel):
     product_id: int
@@ -20,6 +21,7 @@ class PurchaseItemCreate(PurchaseItemBase):
 class PurchaseItem(PurchaseItemBase):
     id: int
     purchase_id: int
+    product: Optional[ProductResponse] = None
 
     class Config:
         from_attributes = True

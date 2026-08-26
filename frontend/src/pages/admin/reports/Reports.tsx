@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useCachedGet } from "../../../services/api";
+import { useDataStore } from "../../../store/dataStore";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -18,7 +18,6 @@ import {
   AlertTriangle, 
   Calendar,
   Clock,
-  RefreshCw
 } from "lucide-react";
 
 export default function Reports() {
@@ -31,60 +30,51 @@ export default function Reports() {
   const [startDate, setStartDate] = useState(defaultStartStr);
   const [endDate, setEndDate] = useState(todayStr);
 
-  // Applied date params — only updated when user clicks Generate
+  // Applied date params — only updated when user clicks "Generate"
   const [appliedStart, setAppliedStart] = useState(defaultStartStr);
   const [appliedEnd, setAppliedEnd] = useState(todayStr);
 
-  // ── Cached GET for each report tab ──────────────────────────────────────
-  // Cache key encodes the date range, so different date ranges are cached separately.
+  // ── Read from Zustand store (survives module navigation) ──────────────────
   const {
-    data: salesReport,
-    loading: salesLoading,
-    syncing: salesSyncing,
-    refetch: refetchSales,
-  } = useCachedGet<any>(
-    "/reports/sales",
-    null,
-    { start_date: appliedStart, end_date: appliedEnd }
-  );
+    reports,
+    fetchSalesReport,
+    fetchPurchaseReport,
+    fetchInventoryReport,
+  } = useDataStore();
 
   const {
-    data: purchaseReport,
-    loading: purchasesLoading,
-    syncing: purchasesSyncing,
-    refetch: refetchPurchases,
-  } = useCachedGet<any>(
-    "/reports/purchases",
-    null,
-    { start_date: appliedStart, end_date: appliedEnd }
-  );
+    salesReport,
+    purchaseReport,
+    inventoryReport,
+    salesLoading,
+    purchasesLoading,
+    inventoryLoading,
+  } = reports;
 
-  const {
-    data: inventoryReport,
-    loading: inventoryLoading,
-    syncing: inventorySyncing,
-    refetch: refetchInventory,
-  } = useCachedGet<any>("/reports/inventory-valuation", null);
+  // Auto-fetch on first mount (no-op if data is fresh and date range matches)
+  // Using useCallback to stabilize the reference
+  const triggerFetch = useCallback(() => {
+    fetchSalesReport(appliedStart, appliedEnd);
+    fetchPurchaseReport(appliedStart, appliedEnd);
+    fetchInventoryReport();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Derive active-tab loading/syncing state
+  // Run once on mount — Zustand will skip if data is already fresh
+  useState(() => { triggerFetch(); });
+
   const loading =
     activeTab === "sales" ? salesLoading :
     activeTab === "purchases" ? purchasesLoading :
     inventoryLoading;
 
-  const syncing =
-    activeTab === "sales" ? salesSyncing :
-    activeTab === "purchases" ? purchasesSyncing :
-    inventorySyncing;
-
   const handleGenerate = useCallback(() => {
     setAppliedStart(startDate);
     setAppliedEnd(endDate);
-    // Force refetch with new params
-    if (activeTab === "sales") refetchSales();
-    else if (activeTab === "purchases") refetchPurchases();
-    else refetchInventory();
-  }, [activeTab, startDate, endDate, refetchSales, refetchPurchases, refetchInventory]);
+    if (activeTab === "sales") fetchSalesReport(startDate, endDate, true);
+    else if (activeTab === "purchases") fetchPurchaseReport(startDate, endDate, true);
+    else fetchInventoryReport(true);
+  }, [activeTab, startDate, endDate, fetchSalesReport, fetchPurchaseReport, fetchInventoryReport]);
 
   // PDF Generators
   const exportSalesReportPDF = () => {
@@ -100,17 +90,19 @@ export default function Reports() {
     doc.text(`Generated On: ${new Date().toLocaleString()}`, 14, 35);
     doc.line(14, 40, 196, 40);
 
+    const pm = salesReport.payment_methods || {};
+
     // Summary Box
     doc.setFontSize(12);
     doc.setTextColor(0, 0, 0);
-    doc.text(`Total Revenue: Rs ${salesReport.total_revenue.toFixed(2)}`, 14, 50);
-    doc.text(`Total Tax Collected: Rs ${salesReport.total_tax.toFixed(2)}`, 14, 57);
-    doc.text(`Total Invoices: ${salesReport.total_invoices}`, 14, 64);
+    doc.text(`Total Revenue: Rs ${(salesReport.total_revenue ?? 0).toFixed(2)}`, 14, 50);
+    doc.text(`Total Tax Collected: Rs ${(salesReport.total_tax ?? 0).toFixed(2)}`, 14, 57);
+    doc.text(`Total Invoices: ${salesReport.total_invoices ?? 0}`, 14, 64);
 
     doc.text("Payment Breakdown:", 120, 50);
-    doc.text(`- Cash: Rs ${salesReport.payment_methods.Cash.toFixed(2)}`, 120, 57);
-    doc.text(`- UPI: Rs ${salesReport.payment_methods.UPI.toFixed(2)}`, 120, 64);
-    doc.text(`- Card: Rs ${salesReport.payment_methods.Card.toFixed(2)}`, 120, 71);
+    doc.text(`- Cash: Rs ${(pm.Cash ?? 0).toFixed(2)}`, 120, 57);
+    doc.text(`- UPI: Rs ${(pm.UPI ?? 0).toFixed(2)}`, 120, 64);
+    doc.text(`- Card: Rs ${(pm.Card ?? 0).toFixed(2)}`, 120, 71);
 
     const headers = [["Date", "Invoices", "Subtotal", "Tax Collected", "Grand Total"]];
     const rows = salesReport.daily_summary.map((day: any) => [
@@ -321,61 +313,61 @@ export default function Reports() {
         </div>
       ) : (
         <>
-          {/* Background sync indicator */}
-          {syncing && (
-            <div className="flex items-center gap-2 text-xs text-indigo-400 animate-pulse">
-              <RefreshCw size={12} className="animate-spin" /> Refreshing data...
-            </div>
-          )}
+
 
           {activeTab === "sales" && salesReport && (
             <div className="space-y-6 animate-fade-in">
               {/* KPI Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 border-l-4 border-l-indigo-500">
-                  <CardHeader className="pb-2">
-                    <CardDescription className="text-slate-400 flex items-center justify-between text-xs">
-                      TOTAL REVENUE <IndianRupee size={14} className="text-indigo-400" />
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-white">₹{salesReport.total_revenue.toFixed(2)}</div>
-                  </CardContent>
-                </Card>
+              {(() => {
+                const pm = salesReport.payment_methods || {};
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 border-l-4 border-l-indigo-500">
+                      <CardHeader className="pb-2">
+                        <CardDescription className="text-slate-400 flex items-center justify-between text-xs">
+                          TOTAL REVENUE <IndianRupee size={14} className="text-indigo-400" />
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-white">₹{(salesReport.total_revenue ?? 0).toFixed(2)}</div>
+                      </CardContent>
+                    </Card>
 
-                <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 border-l-4 border-l-emerald-500">
-                  <CardHeader className="pb-2">
-                    <CardDescription className="text-slate-400 flex items-center justify-between text-xs">
-                      TAX COLLECTED <FileText size={14} className="text-emerald-400" />
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-white">₹{salesReport.total_tax.toFixed(2)}</div>
-                  </CardContent>
-                </Card>
+                    <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 border-l-4 border-l-emerald-500">
+                      <CardHeader className="pb-2">
+                        <CardDescription className="text-slate-400 flex items-center justify-between text-xs">
+                          TAX COLLECTED <FileText size={14} className="text-emerald-400" />
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-white">₹{(salesReport.total_tax ?? 0).toFixed(2)}</div>
+                      </CardContent>
+                    </Card>
 
-                <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 border-l-4 border-l-amber-500">
-                  <CardHeader className="pb-2">
-                    <CardDescription className="text-slate-400 flex items-center justify-between text-xs">
-                      INVOICES COUNT <ShoppingCart size={14} className="text-amber-400" />
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-white">{salesReport.total_invoices}</div>
-                  </CardContent>
-                </Card>
+                    <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 border-l-4 border-l-amber-500">
+                      <CardHeader className="pb-2">
+                        <CardDescription className="text-slate-400 flex items-center justify-between text-xs">
+                          INVOICES COUNT <ShoppingCart size={14} className="text-amber-400" />
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-white">{salesReport.total_invoices ?? 0}</div>
+                      </CardContent>
+                    </Card>
 
-                <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 border-l-4 border-l-rose-500 flex flex-col justify-between">
-                  <div className="px-6 py-4 flex-1">
-                    <div className="text-xs font-semibold text-slate-400 mb-2">PAYMENT BREAKDOWN</div>
-                    <div className="text-xs space-y-1 text-slate-300">
-                      <div className="flex justify-between"><span>Cash:</span><span className="font-semibold">₹{salesReport.payment_methods.Cash.toFixed(2)}</span></div>
-                      <div className="flex justify-between"><span>UPI:</span><span className="font-semibold">₹{salesReport.payment_methods.UPI.toFixed(2)}</span></div>
-                      <div className="flex justify-between"><span>Card:</span><span className="font-semibold">₹{salesReport.payment_methods.Card.toFixed(2)}</span></div>
-                    </div>
+                    <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 border-l-4 border-l-rose-500 flex flex-col justify-between">
+                      <div className="px-6 py-4 flex-1">
+                        <div className="text-xs font-semibold text-slate-400 mb-2">PAYMENT BREAKDOWN</div>
+                        <div className="text-xs space-y-1 text-slate-300">
+                          <div className="flex justify-between"><span>Cash:</span><span className="font-semibold">₹{(pm.Cash ?? 0).toFixed(2)}</span></div>
+                          <div className="flex justify-between"><span>UPI:</span><span className="font-semibold">₹{(pm.UPI ?? 0).toFixed(2)}</span></div>
+                          <div className="flex justify-between"><span>Card:</span><span className="font-semibold">₹{(pm.Card ?? 0).toFixed(2)}</span></div>
+                        </div>
+                      </div>
+                    </Card>
                   </div>
-                </Card>
-              </div>
+                );
+              })()}
 
               {/* Data Table */}
               <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 overflow-hidden">
@@ -399,20 +391,20 @@ export default function Reports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {salesReport.daily_summary.length === 0 ? (
+                    {(salesReport.daily_summary ?? []).length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center py-10 text-slate-500">
                           No sales recorded in this interval.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      salesReport.daily_summary.map((day: any) => (
+                      (salesReport.daily_summary ?? []).map((day: any) => (
                         <TableRow key={day.date} className="border-slate-800 hover:bg-slate-800/50">
                           <TableCell className="font-medium text-slate-200">{day.date}</TableCell>
                           <TableCell className="text-center text-slate-300">{day.invoice_count}</TableCell>
-                          <TableCell className="text-slate-300">₹{day.subtotal.toFixed(2)}</TableCell>
-                          <TableCell className="text-slate-300">₹{day.tax.toFixed(2)}</TableCell>
-                          <TableCell className="font-bold text-emerald-400">₹{day.grand_total.toFixed(2)}</TableCell>
+                          <TableCell className="text-slate-300">₹{(day.subtotal ?? 0).toFixed(2)}</TableCell>
+                          <TableCell className="text-slate-300">₹{(day.tax ?? 0).toFixed(2)}</TableCell>
+                          <TableCell className="font-bold text-emerald-400">₹{(day.grand_total ?? 0).toFixed(2)}</TableCell>
                         </TableRow>
                       ))
                     )}
@@ -432,7 +424,7 @@ export default function Reports() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-white">₹{purchaseReport.total_expense.toFixed(2)}</div>
+                    <div className="text-2xl font-bold text-white">₹{(purchaseReport.total_expense ?? 0).toFixed(2)}</div>
                   </CardContent>
                 </Card>
 
@@ -443,7 +435,7 @@ export default function Reports() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-white">₹{purchaseReport.total_tax.toFixed(2)}</div>
+                    <div className="text-2xl font-bold text-white">₹{(purchaseReport.total_tax ?? 0).toFixed(2)}</div>
                   </CardContent>
                 </Card>
 
@@ -454,7 +446,7 @@ export default function Reports() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-white">{purchaseReport.total_purchases}</div>
+                    <div className="text-2xl font-bold text-white">{purchaseReport.total_purchases ?? 0}</div>
                   </CardContent>
                 </Card>
               </div>
@@ -478,18 +470,18 @@ export default function Reports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {purchaseReport.daily_summary.length === 0 ? (
+                    {(purchaseReport.daily_summary ?? []).length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={3} className="text-center py-10 text-slate-500">
                           No purchases recorded in this interval.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      purchaseReport.daily_summary.map((day: any) => (
+                      (purchaseReport.daily_summary ?? []).map((day: any) => (
                         <TableRow key={day.date} className="border-slate-800 hover:bg-slate-800/50">
                           <TableCell className="font-medium text-slate-200">{day.date}</TableCell>
                           <TableCell className="text-center text-slate-300">{day.purchase_count}</TableCell>
-                          <TableCell className="font-bold text-emerald-400">₹{day.grand_total.toFixed(2)}</TableCell>
+                          <TableCell className="font-bold text-emerald-400">₹{(day.grand_total ?? 0).toFixed(2)}</TableCell>
                         </TableRow>
                       ))
                     )}
@@ -510,8 +502,8 @@ export default function Reports() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-white">{inventoryReport.total_products}</div>
-                    <p className="text-xs text-slate-500 mt-1">Across {inventoryReport.total_batches} active batches</p>
+                    <div className="text-2xl font-bold text-white">{inventoryReport.total_products ?? 0}</div>
+                    <p className="text-xs text-slate-500 mt-1">Across {inventoryReport.total_batches ?? 0} active batches</p>
                   </CardContent>
                 </Card>
 
@@ -522,8 +514,8 @@ export default function Reports() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-white">₹{inventoryReport.valuation_purchase.toFixed(2)}</div>
-                    <p className="text-xs text-emerald-500 font-medium mt-1">Selling Value: ₹{inventoryReport.valuation_selling.toFixed(2)}</p>
+                    <div className="text-2xl font-bold text-white">₹{(inventoryReport.valuation_purchase ?? 0).toFixed(2)}</div>
+                    <p className="text-xs text-emerald-500 font-medium mt-1">Selling Value: ₹{(inventoryReport.valuation_selling ?? 0).toFixed(2)}</p>
                   </CardContent>
                 </Card>
 
@@ -534,8 +526,8 @@ export default function Reports() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-white">{inventoryReport.total_stock_qty} Items</div>
-                    <p className="text-xs text-slate-500 mt-1">MRP Value: ₹{inventoryReport.valuation_mrp.toFixed(2)}</p>
+                    <div className="text-2xl font-bold text-white">{inventoryReport.total_stock_qty ?? 0} Items</div>
+                    <p className="text-xs text-slate-500 mt-1">MRP Value: ₹{(inventoryReport.valuation_mrp ?? 0).toFixed(2)}</p>
                   </CardContent>
                 </Card>
               </div>
@@ -563,14 +555,14 @@ export default function Reports() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {inventoryReport.low_stock_items.length === 0 ? (
+                      {(inventoryReport.low_stock_items ?? []).length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={3} className="text-center py-6 text-xs text-slate-500">
                             No low stock items.
                           </TableCell>
                         </TableRow>
                       ) : (
-                        inventoryReport.low_stock_items.map((item: any) => (
+                        (inventoryReport.low_stock_items ?? []).map((item: any) => (
                           <TableRow key={item.id} className="border-slate-800 hover:bg-slate-800/50">
                             <TableCell className="font-semibold text-slate-300 text-xs">{item.product_name}</TableCell>
                             <TableCell className="font-mono text-xs text-slate-400">{item.batch_number}</TableCell>
@@ -602,14 +594,14 @@ export default function Reports() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {inventoryReport.expiring_soon_items.length === 0 ? (
+                      {(inventoryReport.expiring_soon_items ?? []).length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={3} className="text-center py-6 text-xs text-slate-500">
                             No items expiring soon.
                           </TableCell>
                         </TableRow>
                       ) : (
-                        inventoryReport.expiring_soon_items.map((item: any) => (
+                        (inventoryReport.expiring_soon_items ?? []).map((item: any) => (
                           <TableRow key={item.id} className="border-slate-800 hover:bg-slate-800/50">
                             <TableCell className="font-semibold text-slate-300 text-xs">{item.product_name}</TableCell>
                             <TableCell className="font-mono text-xs text-slate-400">{item.batch_number}</TableCell>

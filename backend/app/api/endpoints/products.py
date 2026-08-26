@@ -196,6 +196,45 @@ def update_product(
     db.refresh(product)
     return product
 
+@router.post("/{id}/image", response_model=ProductResponse)
+def upload_product_image(
+    *,
+    id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_admin)
+) -> Any:
+    product = db.query(Product).filter(Product.id == id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    if not image.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image")
+    
+    UPLOAD_DIR = "uploads/products"
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR)
+        
+    unique_filename = f"product_{uuid.uuid4()}_{image.filename}"
+    file_path = os.path.join(UPLOAD_DIR, unique_filename)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(image.file, buffer)
+        
+    if product.image_url:
+        old_path = os.path.join("uploads/products", product.image_url.split("/")[-1])
+        if os.path.exists(old_path):
+            try:
+                os.remove(old_path)
+            except:
+                pass
+                
+    product.image_url = f"/uploads/products/{unique_filename}"
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    return product
+
 @router.delete("/{id}", response_model=ProductResponse)
 def delete_product(
     *,

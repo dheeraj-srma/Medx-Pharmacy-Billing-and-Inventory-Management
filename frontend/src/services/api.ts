@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 // ─────────────────────────────────────────────────────────────
 // In-Memory Cache Store for GET requests
@@ -186,7 +186,16 @@ export function useCachedGet<T>(
   refetch: () => Promise<void>;
   setData: React.Dispatch<React.SetStateAction<T>>;
 } {
+  // ── Stabilise params: serialise to string for use as an effect dependency.
+  // This prevents a new object reference on every render from causing an
+  // infinite re-render loop (the crash symptom).
+  const paramsKey = JSON.stringify(params ?? null);
   const cacheKey = cacheStore.getKey(url, params);
+
+  // Keep a ref to the latest params so fetchData always uses the current value
+  // without needing to be in the dependency array.
+  const latestParams = useRef(params);
+  useEffect(() => { latestParams.current = params; });
 
   // Seed from cache immediately — avoids loading=true flash on remount
   const [data, setData] = useState<T>(() => {
@@ -205,12 +214,14 @@ export function useCachedGet<T>(
     return () => { isMounted.current = false; };
   }, []);
 
-  const fetchData = async () => {
-    const hasCache = !!cacheStore.get(url, params);
+  // Stable fetchData using useCallback — only recreated when url or params change
+  const fetchData = useCallback(async () => {
+    const p = latestParams.current;
+    const hasCache = !!cacheStore.get(url, p);
 
     // If there's cached data and it's still fresh → don't even hit the network
-    if (cacheStore.isFresh(url, params)) {
-      const cached = cacheStore.get(url, params)!;
+    if (cacheStore.isFresh(url, p)) {
+      const cached = cacheStore.get(url, p)!;
       if (isMounted.current) setData(cached.data);
       return;
     }
@@ -222,7 +233,7 @@ export function useCachedGet<T>(
     }
 
     try {
-      const res = await api.get(url, { params });
+      const res = await api.get(url, { params: p });
       if (isMounted.current) setData(res.data);
     } catch (err) {
       console.error(`useCachedGet failed for ${url}`, err);
@@ -232,7 +243,8 @@ export function useCachedGet<T>(
         setSyncing(false);
       }
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, paramsKey]);
 
   useEffect(() => {
     fetchData();
@@ -261,7 +273,7 @@ export function useCachedGet<T>(
       window.removeEventListener('api-cache-clear', handleCacheClear);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cacheKey]);
+  }, [fetchData, cacheKey]);
 
   return { data, loading, syncing, refetch: fetchData, setData };
 }

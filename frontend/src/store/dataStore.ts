@@ -38,6 +38,22 @@ interface DashboardData {
   recentSales: any[];
 }
 
+// Reports slices keyed by "<startDate>|<endDate>" so different date ranges are cached separately
+interface ReportsState {
+  salesReport: any | null;
+  purchaseReport: any | null;
+  inventoryReport: any | null;
+  salesLoading: boolean;
+  purchasesLoading: boolean;
+  inventoryLoading: boolean;
+  salesLastFetch: number | null;
+  purchasesLastFetch: number | null;
+  inventoryLastFetch: number | null;
+  // Which date range the current data covers
+  salesDateRange: string | null;
+  purchasesDateRange: string | null;
+}
+
 interface DataStoreState {
   // Slices
   products: DataSlice<any[]>;
@@ -48,6 +64,7 @@ interface DataStoreState {
   dashboard: DataSlice<DashboardData>;
   batches: DataSlice<any[]>;
   transactions: DataSlice<any[]>;
+  reports: ReportsState;
 
   // Actions
   fetchProducts: (force?: boolean) => Promise<void>;
@@ -58,6 +75,9 @@ interface DataStoreState {
   fetchDashboard: (force?: boolean) => Promise<void>;
   fetchBatches: (params?: { search?: string; filter_status?: string }, force?: boolean) => Promise<void>;
   fetchTransactions: (force?: boolean) => Promise<void>;
+  fetchSalesReport: (startDate: string, endDate: string, force?: boolean) => Promise<void>;
+  fetchPurchaseReport: (startDate: string, endDate: string, force?: boolean) => Promise<void>;
+  fetchInventoryReport: (force?: boolean) => Promise<void>;
 
   /** Invalidate a slice so the next fetch forces a full reload */
   invalidate: (sliceKey: keyof Pick<DataStoreState, 'products' | 'customers' | 'suppliers' | 'sales' | 'purchases' | 'dashboard' | 'batches' | 'transactions'>) => void;
@@ -137,6 +157,19 @@ export const useDataStore = create<DataStoreState>((set, get) => {
     dashboard: makeSlice<DashboardData>({ stats: null, salesChart: [], recentSales: [] }),
     batches: makeSlice<any[]>([]),
     transactions: makeSlice<any[]>([]),
+    reports: {
+      salesReport: null,
+      purchaseReport: null,
+      inventoryReport: null,
+      salesLoading: false,
+      purchasesLoading: false,
+      inventoryLoading: false,
+      salesLastFetch: null,
+      purchasesLastFetch: null,
+      inventoryLastFetch: null,
+      salesDateRange: null,
+      purchasesDateRange: null,
+    },
 
     // ── Fetch Actions ────────────────────────────────────────────────────────
     fetchProducts: (force) => fetchSlice('products', '/products/', (d) => d, force),
@@ -148,6 +181,104 @@ export const useDataStore = create<DataStoreState>((set, get) => {
     // Batches support dynamic filter params — always force-fetch when params change
     fetchBatches: (params, force) => fetchSlice('batches', '/inventory/batches', (d) => d, force ?? true, params),
     fetchTransactions: (force) => fetchSlice('transactions', '/inventory/transactions', (d) => d, force),
+
+    // ── Reports Actions (parameterized by date range, survives navigation) ──
+    fetchSalesReport: async (startDate, endDate, force = false) => {
+      const rangeKey = `${startDate}|${endDate}`;
+      const { reports } = get();
+      // Skip if data is fresh AND covers the same date range
+      if (
+        !force &&
+        reports.salesReport !== null &&
+        reports.salesDateRange === rangeKey &&
+        reports.salesLastFetch !== null &&
+        !isStale(reports.salesLastFetch)
+      ) return;
+
+      const isBackground = reports.salesReport !== null && reports.salesDateRange === rangeKey;
+      set((s) => ({
+        reports: { ...s.reports, salesLoading: !isBackground },
+      }));
+
+      try {
+        const res = await api.get('/reports/sales', { params: { start_date: startDate, end_date: endDate } });
+        set((s) => ({
+          reports: {
+            ...s.reports,
+            salesReport: res.data,
+            salesLoading: false,
+            salesLastFetch: Date.now(),
+            salesDateRange: rangeKey,
+          },
+        }));
+      } catch (err) {
+        console.error('[dataStore] Failed to fetch sales report', err);
+        set((s) => ({ reports: { ...s.reports, salesLoading: false } }));
+      }
+    },
+
+    fetchPurchaseReport: async (startDate, endDate, force = false) => {
+      const rangeKey = `${startDate}|${endDate}`;
+      const { reports } = get();
+      if (
+        !force &&
+        reports.purchaseReport !== null &&
+        reports.purchasesDateRange === rangeKey &&
+        reports.purchasesLastFetch !== null &&
+        !isStale(reports.purchasesLastFetch)
+      ) return;
+
+      const isBackground = reports.purchaseReport !== null && reports.purchasesDateRange === rangeKey;
+      set((s) => ({
+        reports: { ...s.reports, purchasesLoading: !isBackground },
+      }));
+
+      try {
+        const res = await api.get('/reports/purchases', { params: { start_date: startDate, end_date: endDate } });
+        set((s) => ({
+          reports: {
+            ...s.reports,
+            purchaseReport: res.data,
+            purchasesLoading: false,
+            purchasesLastFetch: Date.now(),
+            purchasesDateRange: rangeKey,
+          },
+        }));
+      } catch (err) {
+        console.error('[dataStore] Failed to fetch purchase report', err);
+        set((s) => ({ reports: { ...s.reports, purchasesLoading: false } }));
+      }
+    },
+
+    fetchInventoryReport: async (force = false) => {
+      const { reports } = get();
+      if (
+        !force &&
+        reports.inventoryReport !== null &&
+        reports.inventoryLastFetch !== null &&
+        !isStale(reports.inventoryLastFetch)
+      ) return;
+
+      const isBackground = reports.inventoryReport !== null;
+      set((s) => ({
+        reports: { ...s.reports, inventoryLoading: !isBackground },
+      }));
+
+      try {
+        const res = await api.get('/reports/inventory-valuation');
+        set((s) => ({
+          reports: {
+            ...s.reports,
+            inventoryReport: res.data,
+            inventoryLoading: false,
+            inventoryLastFetch: Date.now(),
+          },
+        }));
+      } catch (err) {
+        console.error('[dataStore] Failed to fetch inventory report', err);
+        set((s) => ({ reports: { ...s.reports, inventoryLoading: false } }));
+      }
+    },
 
     fetchDashboard: async (force = false) => {
       const slice = get().dashboard;

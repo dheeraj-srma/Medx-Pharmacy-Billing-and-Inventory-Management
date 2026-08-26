@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useDataStore } from "../../../store/dataStore";
+import api from "../../../services/api";
 import { 
   Table, 
   TableBody, 
@@ -10,21 +11,163 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Plus, Search, Eye } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Plus, Search, Eye, X, Building2, Calendar, FileText, Printer, Loader2, Package } from "lucide-react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export default function PurchasesList() {
   const { purchases, fetchPurchases } = useDataStore();
   const { data: purchasesData, loading } = purchases;
   const [search, setSearch] = useState("");
+  
+  // Inward Details Modal State
+  const [selectedPurchaseId, setSelectedPurchaseId] = useState<number | null>(null);
+  const [purchaseDetail, setPurchaseDetail] = useState<any | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
   useEffect(() => {
     // No-op if data is fresh; background-sync if stale
     fetchPurchases();
   }, [fetchPurchases]);
 
+  // Load purchase detail when modal opens
+  useEffect(() => {
+    if (selectedPurchaseId) {
+      setIsLoadingDetail(true);
+      api.get(`/purchases/${selectedPurchaseId}`)
+        .then(res => setPurchaseDetail(res.data))
+        .catch(err => {
+          console.error("Failed to load purchase details", err);
+          alert("Failed to load inward stock details.");
+          setSelectedPurchaseId(null);
+        })
+        .finally(() => setIsLoadingDetail(false));
+    } else {
+      setPurchaseDetail(null);
+    }
+  }, [selectedPurchaseId]);
+
   const filteredPurchases = purchasesData.filter(p => 
-    (p.invoice_number && p.invoice_number.toLowerCase().includes(search.toLowerCase()))
+    (p.invoice_number && p.invoice_number.toLowerCase().includes(search.toLowerCase())) ||
+    (p.supplier?.name && p.supplier.name.toLowerCase().includes(search.toLowerCase())) ||
+    (p.supplier?.company_name && p.supplier.company_name.toLowerCase().includes(search.toLowerCase()))
   );
+
+  const handlePrintInwardPDF = () => {
+    if (!purchaseDetail) return;
+    
+    const doc = new jsPDF();
+    
+    // Top border line
+    doc.setDrawColor(79, 70, 229);
+    doc.setLineWidth(1.5);
+    doc.line(14, 15, 196, 15);
+    
+    // Header
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22);
+    doc.setTextColor(30, 41, 59);
+    doc.text("Med-X Pharmacy", 14, 28);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Inward Stock Receipt | Branch: ${purchaseDetail.branch || "Main"}`, 14, 34);
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 39);
+    
+    // Invoice Badge
+    doc.setFillColor(79, 70, 229);
+    doc.rect(125, 22, 71, 8, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(255, 255, 255);
+    doc.text("GOODS INWARD NOTE", 132, 27.5);
+    
+    // Summary Box
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.rect(14, 46, 182, 24, "FD");
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text("SUPPLIER INVOICE #:", 18, 53);
+    doc.text("INWARD DATE:", 18, 59);
+    doc.text("VENDOR / SUPPLIER:", 18, 65);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(purchaseDetail.invoice_number || "N/A", 60, 53);
+    doc.text(purchaseDetail.purchase_date || "N/A", 60, 59);
+    doc.text(purchaseDetail.supplier?.name || `Supplier #${purchaseDetail.supplier_id}`, 60, 65);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text("COMPANY:", 115, 53);
+    doc.text("GSTIN:", 115, 59);
+    doc.text("TOTAL AMOUNT:", 115, 65);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(purchaseDetail.supplier?.company_name || "N/A", 145, 53);
+    doc.text(purchaseDetail.supplier?.gst_number || "N/A", 145, 59);
+    doc.text(`₹${purchaseDetail.grand_total.toFixed(2)}`, 145, 65);
+    
+    // Items table
+    const tableData = (purchaseDetail.items || []).map((item: any, idx: number) => [
+      idx + 1,
+      item.product?.name || `Product #${item.product_id}`,
+      item.batch_number,
+      item.expiry_date,
+      item.quantity,
+      `₹${item.purchase_price.toFixed(2)}`,
+      `₹${item.mrp.toFixed(2)}`,
+      `₹${item.selling_price.toFixed(2)}`,
+      `₹${(item.quantity * item.purchase_price).toFixed(2)}`
+    ]);
+
+    autoTable(doc, {
+      startY: 76,
+      head: [["#", "Product Name", "Batch", "Expiry", "Qty", "Cost (₹)", "MRP (₹)", "Selling (₹)", "Total (₹)"]],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { 
+        fillColor: [79, 70, 229], 
+        textColor: 255, 
+        fontStyle: 'bold',
+        fontSize: 8
+      },
+      styles: {
+        fontSize: 7.5,
+        cellPadding: 2.5,
+        textColor: [51, 65, 85]
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252]
+      }
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY + 8;
+    
+    // Total Box
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.rect(120, finalY, 76, 14, "FD");
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(15, 23, 42);
+    doc.text("Inward Grand Total:", 125, finalY + 9);
+    doc.setFontSize(11);
+    doc.setTextColor(79, 70, 229);
+    doc.text(`₹${purchaseDetail.grand_total.toFixed(2)}`, 165, finalY + 9);
+    
+    doc.save(`Inward_Receipt_${purchaseDetail.invoice_number || purchaseDetail.id}.pdf`);
+  };
 
   return (
     <div className="space-y-6">
@@ -33,7 +176,7 @@ export default function PurchasesList() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 
             type="text" 
-            placeholder="Search invoice number..." 
+            placeholder="Search invoice or supplier..." 
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -51,8 +194,9 @@ export default function PurchasesList() {
           <TableHeader>
             <TableRow className="border-slate-800 hover:bg-transparent">
               <TableHead className="text-slate-400">Invoice #</TableHead>
-              <TableHead className="text-slate-400">Date</TableHead>
-              <TableHead className="text-slate-400">Supplier</TableHead>
+              <TableHead className="text-slate-400">Inward Date</TableHead>
+              <TableHead className="text-slate-400">Supplier / Vendor</TableHead>
+              <TableHead className="text-slate-400">Branch</TableHead>
               <TableHead className="text-slate-400">Total Amount</TableHead>
               <TableHead className="text-right text-slate-400">Actions</TableHead>
             </TableRow>
@@ -60,13 +204,13 @@ export default function PurchasesList() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-10 text-slate-500">
+                <TableCell colSpan={6} className="text-center py-10 text-slate-500">
                   Loading purchases...
                 </TableCell>
               </TableRow>
             ) : filteredPurchases.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-10 text-slate-500">
+                <TableCell colSpan={6} className="text-center py-10 text-slate-500">
                   No purchases found.
                 </TableCell>
               </TableRow>
@@ -74,19 +218,39 @@ export default function PurchasesList() {
               filteredPurchases.map((purchase) => (
                 <TableRow key={purchase.id} className="border-slate-800 hover:bg-slate-800/50">
                   <TableCell>
-                    <div className="font-medium text-slate-200">{purchase.invoice_number || "N/A"}</div>
+                    <div className="font-mono text-sm font-semibold text-slate-200">{purchase.invoice_number || "N/A"}</div>
                   </TableCell>
                   <TableCell>
-                    <div className="text-sm text-slate-300">{purchase.purchase_date}</div>
+                    <div className="text-sm text-slate-300 flex items-center gap-1.5">
+                      <Calendar size={13} className="text-slate-500" />
+                      {new Date(purchase.purchase_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                    </div>
                   </TableCell>
                   <TableCell>
-                    <span className="text-sm text-slate-300">{purchase.supplier?.name || purchase.supplier_id}</span>
+                    <div className="font-medium text-slate-200">{purchase.supplier?.name || `Supplier #${purchase.supplier_id}`}</div>
+                    {purchase.supplier?.company_name && (
+                      <div className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                        <Building2 size={11} className="text-slate-500" />
+                        {purchase.supplier.company_name}
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell>
-                    <div className="font-medium text-emerald-400">₹{purchase.grand_total}</div>
+                    <span className="text-xs text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                      {purchase.branch || "C-Scheme"}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <div className="font-bold text-emerald-400 font-mono">₹{purchase.grand_total.toFixed(2)}</div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" className="text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => setSelectedPurchaseId(purchase.id)}
+                      className="text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10"
+                      title="View Inward Details"
+                    >
                       <Eye size={18} />
                     </Button>
                   </TableCell>
@@ -96,6 +260,181 @@ export default function PurchasesList() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Inward Purchase Details Modal */}
+      {selectedPurchaseId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in">
+          <Card className="w-full max-w-4xl max-h-[90vh] bg-slate-900 border-slate-800 shadow-2xl overflow-hidden flex flex-col">
+            
+            {/* Header */}
+            <CardHeader className="border-b border-slate-800 pb-4 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-white text-xl flex items-center gap-2">
+                  <FileText className="text-indigo-400" size={22} />
+                  Inward Stock Details
+                </CardTitle>
+                <CardDescription className="text-slate-400 mt-1">
+                  Invoice Number: <span className="text-white font-mono font-semibold">{purchaseDetail?.invoice_number || "—"}</span>
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                {purchaseDetail && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handlePrintInwardPDF}
+                    className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white text-xs h-8"
+                  >
+                    <Printer className="mr-1.5" size={14} /> Print PDF
+                  </Button>
+                )}
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => setSelectedPurchaseId(null)}
+                  className="text-slate-400 hover:text-white hover:bg-slate-800 h-8 w-8"
+                >
+                  <X size={18} />
+                </Button>
+              </div>
+            </CardHeader>
+
+            {/* Content Body */}
+            <CardContent className="p-6 overflow-y-auto space-y-6 flex-1">
+              {isLoadingDetail || !purchaseDetail ? (
+                <div className="flex flex-col items-center justify-center py-16 text-slate-400 space-y-3">
+                  <Loader2 className="animate-spin text-indigo-400" size={32} />
+                  <p className="text-sm font-medium">Loading inward invoice records...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Summary Header Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+                      <span className="text-xs text-slate-500 font-medium">Vendor / Supplier</span>
+                      <div className="text-base font-semibold text-white">{purchaseDetail.supplier?.name || "N/A"}</div>
+                      <div className="text-xs text-slate-400">{purchaseDetail.supplier?.company_name || ""}</div>
+                      {purchaseDetail.supplier?.phone && (
+                        <div className="text-xs text-slate-500 mt-1 font-mono">{purchaseDetail.supplier.phone}</div>
+                      )}
+                    </div>
+
+                    <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+                      <span className="text-xs text-slate-500 font-medium">Invoice Info</span>
+                      <div className="text-sm font-medium text-slate-200">
+                        Date: <span className="text-white">{purchaseDetail.purchase_date}</span>
+                      </div>
+                      <div className="text-sm font-medium text-slate-200">
+                        Branch: <span className="text-white">{purchaseDetail.branch || "C-Scheme"}</span>
+                      </div>
+                      <div className="text-xs text-slate-500 font-mono">
+                        GSTIN: {purchaseDetail.supplier?.gst_number || "N/A"}
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+                      <span className="text-xs text-slate-500 font-medium">Payment & Totals</span>
+                      <div className="text-2xl font-bold text-emerald-400 font-mono">
+                        ₹{purchaseDetail.grand_total.toFixed(2)}
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        Tax: ₹{purchaseDetail.tax_amount.toFixed(2)} • Items: {purchaseDetail.items?.length || 0}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Received Items Table */}
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-1.5">
+                      <Package size={16} className="text-indigo-400" /> Received Batches & Items
+                    </h3>
+                    <div className="bg-slate-950 rounded-lg border border-slate-800 overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="border-slate-800 hover:bg-transparent">
+                            <TableHead className="text-slate-400">#</TableHead>
+                            <TableHead className="text-slate-400">Product</TableHead>
+                            <TableHead className="text-slate-400">Batch</TableHead>
+                            <TableHead className="text-slate-400">Expiry</TableHead>
+                            <TableHead className="text-center text-slate-400">Qty</TableHead>
+                            <TableHead className="text-right text-slate-400">Purchase Cost</TableHead>
+                            <TableHead className="text-right text-slate-400">MRP</TableHead>
+                            <TableHead className="text-right text-slate-400">Selling Price</TableHead>
+                            <TableHead className="text-right text-slate-400">Total</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(!purchaseDetail.items || purchaseDetail.items.length === 0) ? (
+                            <TableRow>
+                              <TableCell colSpan={9} className="text-center py-6 text-slate-500">
+                                No items recorded for this purchase.
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            purchaseDetail.items.map((item: any, idx: number) => (
+                              <TableRow key={item.id || idx} className="border-slate-800/80 hover:bg-slate-900/50">
+                                <TableCell className="text-xs text-slate-500">{idx + 1}</TableCell>
+                                <TableCell>
+                                  <div className="font-semibold text-slate-200 text-sm">
+                                    {item.product?.name || `Product #${item.product_id}`}
+                                  </div>
+                                  {item.product?.pack_size && (
+                                    <div className="text-xs text-slate-500">{item.product.pack_size}</div>
+                                  )}
+                                </TableCell>
+                                <TableCell className="font-mono text-xs text-slate-300">
+                                  {item.batch_number}
+                                </TableCell>
+                                <TableCell className="text-xs text-slate-300">
+                                  {item.expiry_date}
+                                </TableCell>
+                                <TableCell className="text-center font-bold text-white">
+                                  {item.quantity}
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-slate-300">
+                                  ₹{item.purchase_price.toFixed(2)}
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-slate-400">
+                                  ₹{item.mrp.toFixed(2)}
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-emerald-400">
+                                  ₹{item.selling_price.toFixed(2)}
+                                </TableCell>
+                                <TableCell className="text-right font-mono font-bold text-slate-100">
+                                  ₹{(item.quantity * item.purchase_price).toFixed(2)}
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+
+                  {/* Notes & Summary */}
+                  {purchaseDetail.notes && (
+                    <div className="p-3.5 bg-slate-950/60 rounded-lg border border-slate-800">
+                      <span className="text-xs text-slate-500 font-medium">Remarks / Notes:</span>
+                      <p className="text-xs text-slate-300 mt-0.5">{purchaseDetail.notes}</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-800 bg-slate-900/90 flex justify-end gap-3">
+              <Button 
+                variant="outline" 
+                onClick={() => setSelectedPurchaseId(null)}
+                className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+              >
+                Close
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

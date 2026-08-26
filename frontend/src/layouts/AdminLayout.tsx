@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import { useDataStore } from "../store/dataStore";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 
 import { 
   LayoutDashboard, 
@@ -158,7 +159,9 @@ export default function AdminLayout() {
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto p-8 text-slate-300 relative">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/20 via-slate-950 to-slate-950 -z-10 pointer-events-none"></div>
-          <Outlet />
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
     </div>

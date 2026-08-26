@@ -40,8 +40,10 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="products" element={<ProductsList />} />
           <Route path="products/new" element={<AddProduct />} />
+          <Route path="products/edit/:id" element={<AddProduct />} />
           <Route path="suppliers" element={<SuppliersList />} />
           <Route path="suppliers/new" element={<AddSupplier />} />
+          <Route path="suppliers/edit/:id" element={<AddSupplier />} />
           <Route path="purchases" element={<PurchasesList />} />
           <Route path="purchases/new" element={<AddPurchase />} />
           <Route path="customers" element={<CustomersList />} />
