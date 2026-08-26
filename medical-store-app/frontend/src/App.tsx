@@ -1,0 +1,61 @@
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
+import { useAuthStore } from "./store/authStore";
+
+import AdminLayout from "./layouts/AdminLayout";
+import ProductsList from "./pages/admin/ProductsList";
+import AddProduct from "./pages/admin/AddProduct";
+import SuppliersList from "./pages/admin/suppliers/SuppliersList";
+import AddSupplier from "./pages/admin/suppliers/AddSupplier";
+import PurchasesList from "./pages/admin/purchases/PurchasesList";
+import AddPurchase from "./pages/admin/purchases/AddPurchase";
+import CustomersList from "./pages/admin/customers/CustomersList";
+import SalesList from "./pages/admin/sales/SalesList";
+import POS from "./pages/admin/pos/POS";
+import Dashboard from "./pages/admin/Dashboard";
+import Settings from "./pages/admin/Settings";
+import Login from "./pages/Login";
+
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  // Authentication bypassed
+  return <>{children}</>;
+}
+
+function App() {
+  const { token, fetchUser } = useAuthStore();
+
+  useEffect(() => {
+    if (token) {
+      fetchUser();
+    }
+  }, [token, fetchUser]);
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Navigate to="/admin" replace />} />
+        <Route path="/" element={<Navigate to="/admin" replace />} />
+        
+        <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
+          <Route index element={<Dashboard />} />
+          <Route path="products" element={<ProductsList />} />
+          <Route path="products/new" element={<AddProduct />} />
+          <Route path="suppliers" element={<SuppliersList />} />
+          <Route path="suppliers/new" element={<AddSupplier />} />
+          <Route path="purchases" element={<PurchasesList />} />
+          <Route path="purchases/new" element={<AddPurchase />} />
+          <Route path="customers" element={<CustomersList />} />
+          <Route path="sales" element={<SalesList />} />
+          <Route path="pos" element={<POS />} />
+          {/* Placeholders for future phases */}
+          <Route path="inventory" element={<div>Inventory Coming Soon</div>} />
+          <Route path="reports" element={<div>Reports Coming Soon</div>} />
+          <Route path="settings" element={<Settings />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default App;
