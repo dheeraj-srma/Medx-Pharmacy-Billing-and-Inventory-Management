@@ -12,8 +12,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.config import settings
 from app.database.database import Base
-# Import all models here so Alembic can see them
 from app.models import user, product, inventory, supplier, purchase, customer, sale
+from app.models.settings import StoreSettings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

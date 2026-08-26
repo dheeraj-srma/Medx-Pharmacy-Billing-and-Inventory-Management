@@ -90,7 +90,7 @@ export default function PurchasesList() {
                     <div className="text-sm text-slate-300">{purchase.purchase_date}</div>
                   </TableCell>
                   <TableCell>
-                    <span className="text-sm text-slate-300">{purchase.supplier_id}</span> {/* Replace with supplier name later if populated */}
+                    <span className="text-sm text-slate-300">{purchase.supplier?.name || purchase.supplier_id}</span>
                   </TableCell>
                   <TableCell>
                     <div className="font-medium text-emerald-400">₹{purchase.grand_total}</div>

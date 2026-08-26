@@ -13,10 +13,12 @@ class SupplierBase(BaseModel):
     is_active: bool = True
 
 class SupplierCreate(SupplierBase):
-    pass
+    class Config:
+        from_attributes = True
 
 class SupplierUpdate(SupplierBase):
-    pass
+    class Config:
+        from_attributes = True
 
 class Supplier(SupplierBase):
     id: int

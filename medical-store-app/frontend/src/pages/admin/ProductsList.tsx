@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Edit } from "lucide-react";
+import { Plus, Search, Edit, Package } from "lucide-react";
 
 export default function ProductsList() {
   const [products, setProducts] = useState<any[]>([]);

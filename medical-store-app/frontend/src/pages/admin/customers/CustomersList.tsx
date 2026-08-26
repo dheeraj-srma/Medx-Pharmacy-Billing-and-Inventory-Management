@@ -8,7 +8,6 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
 import { Search } from "lucide-react";
 
 export default function CustomersList() {

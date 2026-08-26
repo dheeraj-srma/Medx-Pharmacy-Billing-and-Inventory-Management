@@ -3,8 +3,6 @@ import api from "../../services/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { IndianRupee, FileText, AlertTriangle, Clock, Activity } from "lucide-react";
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -21,7 +19,6 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 
 export default function Dashboard() {
   const [stats, setStats] = useState<any>(null);
@@ -136,7 +133,7 @@ export default function Dashboard() {
                 <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} dy={10} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} tickFormatter={(val) => `₹${val}`} />
                 <Tooltip 
-                  formatter={(value: number) => [`₹${value.toFixed(2)}`, 'Revenue']}
+                  formatter={(value: any) => [`₹${parseFloat(value).toFixed(2)}`, 'Revenue']}
                   contentStyle={{ borderRadius: '8px', border: '1px solid #334155', backgroundColor: '#0f172a', color: '#fff', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.3)' }}
                   itemStyle={{ color: '#818cf8' }}
                 />

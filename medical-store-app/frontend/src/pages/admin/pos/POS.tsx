@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ShoppingCart, Plus, Trash2, Search, Printer, CheckCircle } from "lucide-react";
+import { ShoppingCart, Trash2, Search, Printer, CheckCircle } from "lucide-react";
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -67,11 +67,11 @@ export default function POS() {
     setSearch("");
   };
 
-  const removeFromCart = (batch_id: int) => {
+  const removeFromCart = (batch_id: number) => {
     setCart(cart.filter(item => item.batch_id !== batch_id));
   };
 
-  const updateQuantity = (batch_id: int, newQty: number) => {
+  const updateQuantity = (batch_id: number, newQty: number) => {
     setCart(cart.map(item => {
       if (item.batch_id === batch_id) {
         const validQty = Math.max(1, Math.min(newQty, item.max_qty));

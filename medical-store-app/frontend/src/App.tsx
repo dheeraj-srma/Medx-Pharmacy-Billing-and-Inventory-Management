@@ -14,9 +14,8 @@ import SalesList from "./pages/admin/sales/SalesList";
 import POS from "./pages/admin/pos/POS";
 import Dashboard from "./pages/admin/Dashboard";
 import Settings from "./pages/admin/Settings";
-import Login from "./pages/Login";
-
-
+import InventoryList from "./pages/admin/inventory/InventoryList";
+import Reports from "./pages/admin/reports/Reports";
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   // Authentication bypassed
   return <>{children}</>;
@@ -49,8 +48,8 @@ function App() {
           <Route path="sales" element={<SalesList />} />
           <Route path="pos" element={<POS />} />
           {/* Placeholders for future phases */}
-          <Route path="inventory" element={<div>Inventory Coming Soon</div>} />
-          <Route path="reports" element={<div>Reports Coming Soon</div>} />
+          <Route path="inventory" element={<InventoryList />} />
+          <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

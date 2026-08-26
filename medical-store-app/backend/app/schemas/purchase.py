@@ -14,7 +14,8 @@ class PurchaseItemBase(BaseModel):
     selling_price: float = Field(..., ge=0)
 
 class PurchaseItemCreate(PurchaseItemBase):
-    pass
+    class Config:
+        from_attributes = True
 
 class PurchaseItem(PurchaseItemBase):
     id: int

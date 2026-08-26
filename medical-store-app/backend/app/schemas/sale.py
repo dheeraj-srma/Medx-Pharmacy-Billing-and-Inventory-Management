@@ -12,7 +12,8 @@ class SaleItemBase(BaseModel):
     total_price: float = Field(..., ge=0)
 
 class SaleItemCreate(SaleItemBase):
-    pass
+    class Config:
+        from_attributes = True
 
 class SaleItem(SaleItemBase):
     id: int

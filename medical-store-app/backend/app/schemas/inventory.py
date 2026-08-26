@@ -15,7 +15,8 @@ class InventoryBatchBase(BaseModel):
     supplier_id: Optional[int] = None
 
 class InventoryBatchCreate(InventoryBatchBase):
-    pass
+    class Config:
+        from_attributes = True
 
 class InventoryBatchResponse(InventoryBatchBase):
     id: int
@@ -33,10 +34,26 @@ class InventoryTransactionBase(BaseModel):
     notes: Optional[str] = None
 
 class InventoryTransactionCreate(InventoryTransactionBase):
-    pass
+    class Config:
+        from_attributes = True
 
 class InventoryTransactionResponse(InventoryTransactionBase):
     id: int
     user_id: int
     timestamp: datetime
     model_config = ConfigDict(from_attributes=True)
+
+class StockAdjustmentRequest(BaseModel):
+    batch_id: int
+    quantity_change: int
+    transaction_type: TransactionTypeEnum = TransactionTypeEnum.ADJUSTMENT
+    notes: Optional[str] = None
+
+class InventoryBatchListResponse(InventoryBatchResponse):
+    product_name: str
+    product_sku: Optional[str] = None
+
+class InventoryTransactionListResponse(InventoryTransactionResponse):
+    product_name: str
+    batch_number: Optional[str] = None
+    user_name: Optional[str] = None

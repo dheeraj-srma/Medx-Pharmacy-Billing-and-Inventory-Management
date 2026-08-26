@@ -2,24 +2,21 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
-class CustomerBase(BaseModel):
-    name: str
+class StoreSettingsBase(BaseModel):
+    store_name: str
     phone: Optional[str] = None
     email: Optional[str] = None
     address: Optional[str] = None
-    doctor_name: Optional[str] = None
+    gstin: Optional[str] = None
+    default_tax_rate: float = 12.0
 
-class CustomerCreate(CustomerBase):
+class StoreSettingsUpdate(StoreSettingsBase):
     class Config:
         from_attributes = True
 
-class CustomerUpdate(CustomerBase):
-    class Config:
-        from_attributes = True
-
-class Customer(CustomerBase):
+class StoreSettingsResponse(StoreSettingsBase):
     id: int
-    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True

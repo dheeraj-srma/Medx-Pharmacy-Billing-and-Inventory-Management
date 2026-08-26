@@ -32,7 +32,6 @@ const productSchema = z.object({
   reorder_level: z.coerce.number().default(10),
 });
 
-type ProductFormValues = z.infer<typeof productSchema>;
 
 export default function AddProduct() {
   const navigate = useNavigate();
@@ -41,7 +40,7 @@ export default function AddProduct() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<ProductFormValues>({
+  const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<any>({
     resolver: zodResolver(productSchema),
     defaultValues: {
       reorder_level: 10,
@@ -65,7 +64,7 @@ export default function AddProduct() {
     }
   };
 
-  const onSubmit = async (data: ProductFormValues) => {
+  const onSubmit = async (data: any) => {
     try {
       setIsSubmitting(true);
       
@@ -121,7 +120,7 @@ export default function AddProduct() {
                 <div className="space-y-2">
                   <Label htmlFor="name">Product Name *</Label>
                   <Input id="name" {...register("name")} placeholder="e.g. Paracetamol 500mg" />
-                  {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
+                  {errors.name && <p className="text-sm text-red-500">{errors.name.message as string}</p>}
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
@@ -164,12 +163,12 @@ export default function AddProduct() {
                 <div className="space-y-2">
                   <Label htmlFor="mrp">MRP (₹) *</Label>
                   <Input id="mrp" type="number" step="0.01" {...register("mrp")} placeholder="0.00" />
-                  {errors.mrp && <p className="text-sm text-red-500">{errors.mrp.message}</p>}
+                  {errors.mrp && <p className="text-sm text-red-500">{errors.mrp.message as string}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="selling_price">Selling Price (₹) *</Label>
                   <Input id="selling_price" type="number" step="0.01" {...register("selling_price")} placeholder="0.00" />
-                  {errors.selling_price && <p className="text-sm text-red-500">{errors.selling_price.message}</p>}
+                  {errors.selling_price && <p className="text-sm text-red-500">{errors.selling_price.message as string}</p>}
                 </div>
                 <div className="space-y-2 col-span-2">
                   <Label htmlFor="pack_size">Pack Size</Label>

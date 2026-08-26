@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import api from '../services/api';
 
 interface User {
-  id: int;
+  id: number;
   email: string;
   full_name: string | null;
   role: 'admin' | 'staff';
