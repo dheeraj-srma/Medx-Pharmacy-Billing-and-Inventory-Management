@@ -47,25 +47,25 @@ export default function SuppliersList() {
             placeholder="Search suppliers..." 
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
         <Link to="/admin/suppliers/new">
-          <Button className="bg-blue-600 hover:bg-blue-700">
+          <Button className="bg-indigo-600 hover:bg-indigo-700 text-white">
             <Plus className="mr-2" size={18} /> Add Supplier
           </Button>
         </Link>
       </div>
 
-      <div className="bg-white rounded-md border">
+      <div className="bg-slate-900/50 backdrop-blur-sm rounded-md border border-slate-800 shadow-xl shadow-black/10">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Supplier Info</TableHead>
-              <TableHead>Contact</TableHead>
-              <TableHead>GST Number</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+            <TableRow className="border-slate-800 hover:bg-transparent">
+              <TableHead className="text-slate-400">Supplier Info</TableHead>
+              <TableHead className="text-slate-400">Contact</TableHead>
+              <TableHead className="text-slate-400">GST Number</TableHead>
+              <TableHead className="text-slate-400">Status</TableHead>
+              <TableHead className="text-right text-slate-400">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -83,25 +83,25 @@ export default function SuppliersList() {
               </TableRow>
             ) : (
               filteredSuppliers.map((supplier) => (
-                <TableRow key={supplier.id}>
+                <TableRow key={supplier.id} className="border-slate-800 hover:bg-slate-800/50">
                   <TableCell>
-                    <div className="font-medium text-slate-900">{supplier.name}</div>
+                    <div className="font-medium text-slate-200">{supplier.name}</div>
                     <div className="text-sm text-slate-500">{supplier.company_name || "N/A"}</div>
                   </TableCell>
                   <TableCell>
-                    <div className="text-sm">{supplier.phone || "N/A"}</div>
+                    <div className="text-sm text-slate-300">{supplier.phone || "N/A"}</div>
                     <div className="text-sm text-slate-500">{supplier.email || "N/A"}</div>
                   </TableCell>
                   <TableCell>
-                    <span className="font-mono text-sm">{supplier.gst_number || "N/A"}</span>
+                    <span className="font-mono text-sm text-slate-300">{supplier.gst_number || "N/A"}</span>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={supplier.is_active ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"}>
+                    <Badge variant="outline" className={supplier.is_active ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border-rose-500/20"}>
                       {supplier.is_active ? "Active" : "Inactive"}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" className="text-slate-500 hover:text-blue-600">
+                    <Button variant="ghost" size="icon" className="text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10">
                       <Edit size={18} />
                     </Button>
                   </TableCell>

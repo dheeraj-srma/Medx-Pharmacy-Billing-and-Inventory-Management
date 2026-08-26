@@ -46,25 +46,25 @@ export default function PurchasesList() {
             placeholder="Search invoice number..." 
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
         <Link to="/admin/purchases/new">
-          <Button className="bg-blue-600 hover:bg-blue-700">
+          <Button className="bg-indigo-600 hover:bg-indigo-700 text-white">
             <Plus className="mr-2" size={18} /> Inward Stock (Purchase)
           </Button>
         </Link>
       </div>
 
-      <div className="bg-white rounded-md border">
+      <div className="bg-slate-900/50 backdrop-blur-sm rounded-md border border-slate-800 shadow-xl shadow-black/10">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Invoice #</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Supplier</TableHead>
-              <TableHead>Total Amount</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+            <TableRow className="border-slate-800 hover:bg-transparent">
+              <TableHead className="text-slate-400">Invoice #</TableHead>
+              <TableHead className="text-slate-400">Date</TableHead>
+              <TableHead className="text-slate-400">Supplier</TableHead>
+              <TableHead className="text-slate-400">Total Amount</TableHead>
+              <TableHead className="text-right text-slate-400">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -82,21 +82,21 @@ export default function PurchasesList() {
               </TableRow>
             ) : (
               filteredPurchases.map((purchase) => (
-                <TableRow key={purchase.id}>
+                <TableRow key={purchase.id} className="border-slate-800 hover:bg-slate-800/50">
                   <TableCell>
-                    <div className="font-medium text-slate-900">{purchase.invoice_number || "N/A"}</div>
+                    <div className="font-medium text-slate-200">{purchase.invoice_number || "N/A"}</div>
                   </TableCell>
                   <TableCell>
-                    <div className="text-sm">{purchase.purchase_date}</div>
+                    <div className="text-sm text-slate-300">{purchase.purchase_date}</div>
                   </TableCell>
                   <TableCell>
-                    <span className="text-sm">{purchase.supplier_id}</span> {/* Replace with supplier name later if populated */}
+                    <span className="text-sm text-slate-300">{purchase.supplier_id}</span> {/* Replace with supplier name later if populated */}
                   </TableCell>
                   <TableCell>
-                    <div className="font-medium text-slate-900">₹{purchase.grand_total}</div>
+                    <div className="font-medium text-emerald-400">₹{purchase.grand_total}</div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" className="text-slate-500 hover:text-blue-600">
+                    <Button variant="ghost" size="icon" className="text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10">
                       <Eye size={18} />
                     </Button>
                   </TableCell>

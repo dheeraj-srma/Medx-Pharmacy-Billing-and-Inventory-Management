@@ -8,6 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ShoppingCart, Plus, Trash2, Search, Printer, CheckCircle } from "lucide-react";
 
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
+
 export default function POS() {
   const [activeBatches, setActiveBatches] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
@@ -16,9 +19,14 @@ export default function POS() {
   
   // Sale states
   const [customerId, setCustomerId] = useState<string>("walk-in");
+  const [walkInName, setWalkInName] = useState("");
+  const [walkInPhone, setWalkInPhone] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [completedSale, setCompletedSale] = useState<any>(null);
+  
+  // We need to keep a snapshot of the cart and walk-in details to print after the cart is cleared
+  const [printSnapshot, setPrintSnapshot] = useState<any>(null);
 
   useEffect(() => {
     // Fetch available batches and customers
@@ -96,8 +104,34 @@ export default function POS() {
       };
 
       const res = await api.post("/sales/", payload);
+      
+      let custName = "Walk-in";
+      let custPhone = "N/A";
+      
+      if (customerId === "walk-in") {
+        if (walkInName) custName = walkInName;
+        if (walkInPhone) custPhone = walkInPhone;
+      } else {
+        const c = customers.find(x => x.id.toString() === customerId);
+        if (c) {
+          custName = c.name;
+          custPhone = c.phone || "N/A";
+        }
+      }
+
+      setPrintSnapshot({
+        cart: [...cart],
+        grandTotal,
+        customerName: custName,
+        customerPhone: custPhone,
+        invoiceNumber: res.data.invoice_number,
+        date: new Date().toLocaleString()
+      });
+
       setCompletedSale(res.data);
       setCart([]);
+      setWalkInName("");
+      setWalkInPhone("");
       
       // Refresh batches to reflect new quantities
       api.get("/inventory/active-batches").then(r => setActiveBatches(r.data));
@@ -110,16 +144,76 @@ export default function POS() {
     }
   };
 
+  const handlePrintPDF = () => {
+    if (!printSnapshot) return;
+    
+    const doc = new jsPDF();
+    
+    // Header
+    doc.setFontSize(22);
+    doc.setTextColor(41, 128, 185); // Blue
+    doc.text("Med-X Pharmacy", 14, 22);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text("123 Health Ave, Mumbai, India", 14, 30);
+    doc.text("Contact: 9145887170", 14, 35);
+    doc.text("GSTIN: 22AAAAA0000A1Z5", 14, 40);
+    
+    // Line separator
+    doc.setDrawColor(200, 200, 200);
+    doc.line(14, 45, 196, 45);
+    
+    // Invoice Details
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Invoice Number: ${printSnapshot.invoiceNumber}`, 14, 55);
+    doc.text(`Date: ${printSnapshot.date}`, 14, 62);
+    
+    doc.text(`Customer Name: ${printSnapshot.customerName}`, 120, 55);
+    doc.text(`Customer Phone: ${printSnapshot.customerPhone}`, 120, 62);
+    
+    // Table
+    const tableColumn = ["Product", "Batch", "Qty", "Unit Price", "Total"];
+    const tableRows = printSnapshot.cart.map((item: any) => [
+      item.product_name,
+      item.batch_number,
+      item.quantity,
+      `Rs ${item.unit_price}`,
+      `Rs ${item.total_price.toFixed(2)}`
+    ]);
+    
+    autoTable(doc, {
+      startY: 75,
+      head: [tableColumn],
+      body: tableRows,
+      theme: 'grid',
+      headStyles: { fillColor: [41, 128, 185] },
+    });
+    
+    // Footer / Totals
+    const finalY = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFontSize(14);
+    doc.text(`Grand Total: Rs ${printSnapshot.grandTotal.toFixed(2)}`, 140, finalY);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(150, 150, 150);
+    doc.text("Thank you for choosing Med-X Pharmacy!", 14, finalY + 20);
+    
+    // Save PDF
+    doc.save(`Invoice_${printSnapshot.invoiceNumber}.pdf`);
+  };
+
   if (completedSale) {
     return (
       <div className="max-w-2xl mx-auto mt-10">
         <Card className="text-center p-8 border-green-200 bg-green-50">
           <CheckCircle className="mx-auto text-green-500 mb-4" size={64} />
-          <h2 className="text-3xl font-bold text-green-700 mb-2">Sale Completed!</h2>
-          <p className="text-slate-600 mb-6">Invoice Number: <strong>{completedSale.invoice_number}</strong></p>
+          <h2 className="text-3xl font-bold text-emerald-400 mb-2">Sale Completed!</h2>
+          <p className="text-slate-400 mb-6">Invoice Number: <strong className="text-white">{completedSale.invoice_number}</strong></p>
           <div className="flex justify-center gap-4">
-            <Button variant="outline" onClick={() => window.print()}>
-              <Printer className="mr-2" size={18} /> Print Bill
+            <Button variant="outline" onClick={handlePrintPDF}>
+              <Printer className="mr-2" size={18} /> Print PDF Bill
             </Button>
             <Button onClick={() => setCompletedSale(null)} className="bg-blue-600">
               New Sale
@@ -144,26 +238,26 @@ export default function POS() {
               placeholder="Search product to add to bill..." 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 py-6 text-lg w-full bg-white shadow-sm"
+              className="pl-10 py-6 text-lg w-full bg-slate-900 border-slate-700 text-white placeholder-slate-400 shadow-sm"
             />
           </div>
           
           {search && (
-            <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg">
+            <div className="absolute z-10 w-full mt-1 bg-slate-900 border border-slate-700 rounded-md shadow-lg shadow-black/20">
               {filteredBatches.length > 0 ? (
-                <ul className="divide-y max-h-64 overflow-y-auto">
+                <ul className="divide-y divide-slate-800 max-h-64 overflow-y-auto">
                   {filteredBatches.map(batch => (
                     <li 
                       key={batch.id} 
-                      className="p-3 hover:bg-slate-50 cursor-pointer flex justify-between items-center"
+                      className="p-3 hover:bg-slate-800 cursor-pointer flex justify-between items-center"
                       onClick={() => addToCart(batch)}
                     >
                       <div>
-                        <p className="font-semibold">{batch.product_name}</p>
+                        <p className="font-semibold text-slate-200">{batch.product_name}</p>
                         <p className="text-xs text-slate-500">Batch: {batch.batch_number} | Exp: {batch.expiry_date} | Stock: {batch.quantity_available}</p>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-green-600">₹{batch.selling_price}</p>
+                        <p className="font-bold text-emerald-400">₹{batch.selling_price}</p>
                       </div>
                     </li>
                   ))}
@@ -176,20 +270,20 @@ export default function POS() {
         </div>
 
         {/* Cart Table */}
-        <Card className="flex-1 overflow-hidden flex flex-col">
-          <CardHeader className="bg-slate-50 py-3 border-b">
-            <CardTitle className="text-lg flex items-center">
-              <ShoppingCart className="mr-2 text-blue-600" size={20} /> Current Bill
+        <Card className="flex-1 overflow-hidden flex flex-col bg-slate-900/50 backdrop-blur-sm border-slate-800">
+          <CardHeader className="bg-slate-900/80 py-3 border-b border-slate-800">
+            <CardTitle className="text-lg flex items-center text-slate-200">
+              <ShoppingCart className="mr-2 text-indigo-400" size={20} /> Current Bill
             </CardTitle>
           </CardHeader>
           <div className="flex-1 overflow-y-auto">
             <Table>
-              <TableHeader className="bg-white sticky top-0 z-0 shadow-sm">
-                <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead className="w-24">Qty</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Total</TableHead>
+              <TableHeader className="bg-slate-900 sticky top-0 z-0 shadow-sm">
+                <TableRow className="border-slate-800 hover:bg-transparent">
+                  <TableHead className="text-slate-400">Product</TableHead>
+                  <TableHead className="w-24 text-slate-400">Qty</TableHead>
+                  <TableHead className="text-slate-400">Price</TableHead>
+                  <TableHead className="text-slate-400">Total</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
@@ -202,9 +296,9 @@ export default function POS() {
                   </TableRow>
                 ) : (
                   cart.map(item => (
-                    <TableRow key={item.batch_id}>
+                    <TableRow key={item.batch_id} className="border-slate-800 hover:bg-slate-800/50">
                       <TableCell>
-                        <div className="font-medium">{item.product_name}</div>
+                        <div className="font-medium text-slate-200">{item.product_name}</div>
                         <div className="text-xs text-slate-500">Batch: {item.batch_number}</div>
                       </TableCell>
                       <TableCell>
@@ -214,13 +308,13 @@ export default function POS() {
                           max={item.max_qty}
                           value={item.quantity} 
                           onChange={(e) => updateQuantity(item.batch_id, parseInt(e.target.value) || 1)}
-                          className="w-16 h-8 text-center p-1"
+                          className="w-16 h-8 text-center p-1 bg-slate-950 border-slate-700 text-white"
                         />
                       </TableCell>
-                      <TableCell>₹{item.unit_price}</TableCell>
-                      <TableCell className="font-bold">₹{item.total_price.toFixed(2)}</TableCell>
+                      <TableCell className="text-slate-300">₹{item.unit_price}</TableCell>
+                      <TableCell className="font-bold text-slate-200">₹{item.total_price.toFixed(2)}</TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" className="text-red-500 h-8 w-8" onClick={() => removeFromCart(item.batch_id)}>
+                        <Button variant="ghost" size="icon" className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 h-8 w-8" onClick={() => removeFromCart(item.batch_id)}>
                           <Trash2 size={16} />
                         </Button>
                       </TableCell>
@@ -255,6 +349,29 @@ export default function POS() {
                     ))}
                   </SelectContent>
                 </Select>
+                
+                {customerId === "walk-in" && (
+                  <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-700">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-slate-400">Name (Optional)</Label>
+                      <Input 
+                        placeholder="Customer Name" 
+                        value={walkInName}
+                        onChange={(e) => setWalkInName(e.target.value)}
+                        className="h-8 text-sm bg-slate-900 border-slate-700"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-slate-400">Phone (Optional)</Label>
+                      <Input 
+                        placeholder="Phone Number" 
+                        value={walkInPhone}
+                        onChange={(e) => setWalkInPhone(e.target.value)}
+                        className="h-8 text-sm bg-slate-900 border-slate-700"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -272,23 +389,23 @@ export default function POS() {
               </div>
             </div>
 
-            <div className="border-t pt-4 space-y-2">
-              <div className="flex justify-between text-slate-600">
+            <div className="border-t border-slate-700 pt-4 space-y-2">
+              <div className="flex justify-between text-slate-400">
                 <span>Subtotal ({cart.length} items)</span>
                 <span>₹{grandTotal.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-slate-600">
+              <div className="flex justify-between text-slate-400">
                 <span>Discount</span>
                 <span>₹0.00</span>
               </div>
-              <div className="flex justify-between items-center pt-4 border-t border-dashed">
-                <span className="text-xl font-bold">Total Pay</span>
-                <span className="text-3xl font-bold text-blue-600">₹{grandTotal.toFixed(2)}</span>
+              <div className="flex justify-between items-center pt-4 border-t border-dashed border-slate-600">
+                <span className="text-xl font-bold text-slate-200">Total Pay</span>
+                <span className="text-3xl font-bold text-emerald-400">₹{grandTotal.toFixed(2)}</span>
               </div>
             </div>
 
             <Button 
-              className="w-full h-14 text-lg bg-green-600 hover:bg-green-700"
+              className="w-full h-14 text-lg bg-indigo-600 hover:bg-indigo-700 text-white"
               disabled={cart.length === 0 || isSubmitting}
               onClick={handleCheckout}
             >

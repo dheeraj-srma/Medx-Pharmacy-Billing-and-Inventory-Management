@@ -2,7 +2,6 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
 from app.schemas.customer import Customer
-from app.schemas.product import Product
 
 class SaleItemBase(BaseModel):
     product_id: int

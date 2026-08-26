@@ -45,20 +45,20 @@ export default function CustomersList() {
             placeholder="Search by name or phone..." 
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
       </div>
 
-      <div className="bg-white rounded-md border">
+      <div className="bg-slate-900/50 backdrop-blur-sm rounded-md border border-slate-800 shadow-xl shadow-black/10">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Customer Name</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Doctor</TableHead>
-              <TableHead>Added On</TableHead>
+            <TableRow className="border-slate-800 hover:bg-transparent">
+              <TableHead className="text-slate-400">Customer Name</TableHead>
+              <TableHead className="text-slate-400">Phone</TableHead>
+              <TableHead className="text-slate-400">Email</TableHead>
+              <TableHead className="text-slate-400">Doctor</TableHead>
+              <TableHead className="text-slate-400">Added On</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -76,11 +76,11 @@ export default function CustomersList() {
               </TableRow>
             ) : (
               filteredCustomers.map((customer) => (
-                <TableRow key={customer.id}>
-                  <TableCell className="font-medium text-slate-900">{customer.name}</TableCell>
-                  <TableCell>{customer.phone || "N/A"}</TableCell>
-                  <TableCell>{customer.email || "N/A"}</TableCell>
-                  <TableCell>{customer.doctor_name || "N/A"}</TableCell>
+                <TableRow key={customer.id} className="border-slate-800 hover:bg-slate-800/50">
+                  <TableCell className="font-medium text-slate-200">{customer.name}</TableCell>
+                  <TableCell className="text-slate-300">{customer.phone || "N/A"}</TableCell>
+                  <TableCell className="text-slate-300">{customer.email || "N/A"}</TableCell>
+                  <TableCell className="text-slate-300">{customer.doctor_name || "N/A"}</TableCell>
                   <TableCell className="text-slate-500">
                     {new Date(customer.created_at).toLocaleDateString()}
                   </TableCell>
