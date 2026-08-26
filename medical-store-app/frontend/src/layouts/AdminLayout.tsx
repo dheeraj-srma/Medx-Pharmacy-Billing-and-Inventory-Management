@@ -8,14 +8,13 @@ import {
   Users, 
   BarChart, 
   Settings,
-  LogOut,
   ChevronLeft,
   ChevronRight
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function AdminLayout() {
-  const { user, logout } = useAuthStore();
+  const { user } = useAuthStore();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -97,15 +96,6 @@ export default function AdminLayout() {
           </nav>
         </TooltipProvider>
 
-        <div className="p-4 border-t border-slate-800 shrink-0">
-          <button 
-            onClick={logout}
-            className={`flex items-center gap-3 px-3 py-2.5 w-full text-sm font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors ${isCollapsed ? "justify-center" : ""}`}
-          >
-            <LogOut size={20} />
-            {!isCollapsed && <span>Logout</span>}
-          </button>
-        </div>
       </aside>
 
       {/* Main Content */}
@@ -118,9 +108,6 @@ export default function AdminLayout() {
           <div className="flex items-center gap-4">
             <div className="text-sm font-medium text-slate-400">
               {user?.full_name || user?.email || "Admin"}
-            </div>
-            <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold shadow-sm shadow-indigo-900/20">
-              {user?.email?.[0].toUpperCase() || "A"}
             </div>
           </div>
         </header>

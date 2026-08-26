@@ -22,3 +22,11 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: str | None = None
+
+class UserUpdate(BaseModel):
+    full_name: str | None = None
+    role: RoleEnum | None = None
+    is_active: bool | None = None
+
+class AdminPasswordReset(BaseModel):
+    password: str

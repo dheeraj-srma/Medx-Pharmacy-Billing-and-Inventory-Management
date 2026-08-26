@@ -43,6 +43,7 @@ def create_sale(
             grand_total=sale.grand_total,
             payment_method=sale.payment_method,
             status="COMPLETED",
+            branch=sale.branch,
             created_by=current_user.id
         )
         db.add(db_sale)

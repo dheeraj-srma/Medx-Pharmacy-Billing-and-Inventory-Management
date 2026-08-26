@@ -34,6 +34,7 @@ def create_purchase(
             discount_amount=purchase.discount_amount,
             grand_total=purchase.grand_total,
             notes=purchase.notes,
+            branch=purchase.branch,
             created_by=current_user.id
         )
         db.add(db_purchase)

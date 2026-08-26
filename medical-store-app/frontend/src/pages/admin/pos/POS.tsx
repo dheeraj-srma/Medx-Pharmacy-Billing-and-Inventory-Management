@@ -24,6 +24,8 @@ export default function POS() {
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [completedSale, setCompletedSale] = useState<any>(null);
+  const [matchedCustomerId, setMatchedCustomerId] = useState<number | null>(null);
+  const [branch, setBranch] = useState("C-Scheme");
   
   // We need to keep a snapshot of the cart and walk-in details to print after the cart is cleared
   const [printSnapshot, setPrintSnapshot] = useState<any>(null);
@@ -83,16 +85,84 @@ export default function POS() {
 
   const grandTotal = cart.reduce((sum, item) => sum + item.total_price, 0);
 
+  const handlePhoneChange = (val: string) => {
+    // Only allow numbers and '+'
+    let cleaned = val.replace(/[^\d+]/g, "");
+    
+    // Auto-prepend +91 if length is exactly 10 digits and doesn't start with +
+    if (/^\d{10}$/.test(cleaned)) {
+      cleaned = "+91" + cleaned;
+    }
+    
+    setWalkInPhone(cleaned);
+
+    const cleanNumber = cleaned.replace(/[^\d]/g, "");
+    if (cleanNumber.length >= 10) {
+      const match = customers.find(c => {
+        if (!c.phone) return false;
+        const cPhoneClean = c.phone.replace(/[^\d]/g, "");
+        return cPhoneClean.endsWith(cleanNumber.slice(-10));
+      });
+
+      if (match) {
+        setWalkInName(match.name);
+        setMatchedCustomerId(match.id);
+      } else {
+        setMatchedCustomerId(null);
+      }
+    } else {
+      setMatchedCustomerId(null);
+    }
+  };
+
   const handleCheckout = async () => {
     if (cart.length === 0) return;
     setIsSubmitting(true);
     
     try {
+      let finalCustomerId: number | null = null;
+      let custName = "Walk-in";
+      let custPhone = "N/A";
+
+      if (customerId !== "walk-in") {
+        finalCustomerId = parseInt(customerId);
+        const c = customers.find(x => x.id.toString() === customerId);
+        if (c) {
+          custName = c.name;
+          custPhone = c.phone || "N/A";
+        }
+      } else if (matchedCustomerId) {
+        finalCustomerId = matchedCustomerId;
+        custName = walkInName;
+        custPhone = walkInPhone;
+      } else if (walkInPhone) {
+        // Auto-create customer
+        const nameToSave = walkInName.trim() || `Customer (${walkInPhone})`;
+        try {
+          const custRes = await api.post("/customers/", {
+            name: nameToSave,
+            phone: walkInPhone
+          });
+          finalCustomerId = custRes.data.id;
+          custName = custRes.data.name;
+          custPhone = custRes.data.phone || "N/A";
+          // Refresh customers list so they appear in dropdown next time
+          api.get("/customers/").then(r => setCustomers(r.data));
+        } catch (err) {
+          console.error("Failed to auto-create customer", err);
+          custName = nameToSave;
+          custPhone = walkInPhone;
+        }
+      } else if (walkInName) {
+        custName = walkInName;
+      }
+
       const payload = {
-        customer_id: customerId === "walk-in" ? null : parseInt(customerId),
+        customer_id: finalCustomerId,
         total_amount: grandTotal,
         grand_total: grandTotal,
         payment_method: paymentMethod,
+        branch: branch,
         items: cart.map(item => ({
           product_id: item.product_id,
           batch_id: item.batch_id,
@@ -104,20 +174,6 @@ export default function POS() {
       };
 
       const res = await api.post("/sales/", payload);
-      
-      let custName = "Walk-in";
-      let custPhone = "N/A";
-      
-      if (customerId === "walk-in") {
-        if (walkInName) custName = walkInName;
-        if (walkInPhone) custPhone = walkInPhone;
-      } else {
-        const c = customers.find(x => x.id.toString() === customerId);
-        if (c) {
-          custName = c.name;
-          custPhone = c.phone || "N/A";
-        }
-      }
 
       setPrintSnapshot({
         cart: [...cart],
@@ -125,6 +181,7 @@ export default function POS() {
         customerName: custName,
         customerPhone: custPhone,
         invoiceNumber: res.data.invoice_number,
+        branch: branch,
         date: new Date().toLocaleString()
       });
 
@@ -132,6 +189,7 @@ export default function POS() {
       setCart([]);
       setWalkInName("");
       setWalkInPhone("");
+      setMatchedCustomerId(null);
       
       // Refresh batches to reflect new quantities
       api.get("/inventory/active-batches").then(r => setActiveBatches(r.data));
@@ -149,73 +207,139 @@ export default function POS() {
     
     const doc = new jsPDF();
     
-    // Header
-    doc.setFontSize(22);
-    doc.setTextColor(41, 128, 185); // Blue
-    doc.text("Med-X Pharmacy", 14, 22);
+    // Draw top layout line accent
+    doc.setDrawColor(79, 70, 229); // Indigo border
+    doc.setLineWidth(1.5);
+    doc.line(14, 15, 196, 15);
     
+    // Title header
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(24);
+    doc.setTextColor(30, 41, 59); // Slate-800
+    doc.text("Med-X Pharmacy", 14, 28);
+    
+    const branchAddress = printSnapshot.branch === "Mansarovar"
+      ? "Sector 10, Mansarovar, Jaipur, Rajasthan"
+      : "C-Scheme, Jaipur, Rajasthan";
+    const branchPhone = printSnapshot.branch === "Mansarovar"
+      ? "+91 141-8765432"
+      : "+91 9145887170";
+    const branchGstin = printSnapshot.branch === "Mansarovar"
+      ? "GSTIN: 22AAAAA0000A2Z6"
+      : "GSTIN: 22AAAAA0000A1Z5";
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139); // Slate-500
+    doc.text(branchAddress, 14, 34);
+    doc.text(`Contact: ${branchPhone} | support@medex.com`, 14, 39);
+    doc.text(branchGstin, 14, 44);
+    
+    // Invoice Title Badge
+    doc.setFillColor(79, 70, 229);
+    doc.rect(130, 22, 66, 8, "F");
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text("123 Health Ave, Mumbai, India", 14, 30);
-    doc.text("Contact: 9145887170", 14, 35);
-    doc.text("GSTIN: 22AAAAA0000A1Z5", 14, 40);
+    doc.setTextColor(255, 255, 255);
+    doc.text("RETAIL BILL / INVOICE", 144, 27.5);
     
-    // Line separator
-    doc.setDrawColor(200, 200, 200);
-    doc.line(14, 45, 196, 45);
+    // Info Box Card
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    doc.rect(14, 50, 182, 22, "FD");
     
-    // Invoice Details
-    doc.setFontSize(12);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Invoice Number: ${printSnapshot.invoiceNumber}`, 14, 55);
-    doc.text(`Date: ${printSnapshot.date}`, 14, 62);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105);
+    doc.text("INVOICE DETAILS", 18, 55);
+    doc.text("CUSTOMER DETAILS", 110, 55);
     
-    doc.text(`Customer Name: ${printSnapshot.customerName}`, 120, 55);
-    doc.text(`Customer Phone: ${printSnapshot.customerPhone}`, 120, 62);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(51, 65, 85);
+    doc.text(`Invoice No : ${printSnapshot.invoiceNumber}`, 18, 61);
+    doc.text(`Date       : ${printSnapshot.date}`, 18, 66);
+    
+    doc.text(`Name  : ${printSnapshot.customerName}`, 110, 61);
+    doc.text(`Phone : ${printSnapshot.customerPhone}`, 110, 66);
     
     // Table
-    const tableColumn = ["Product", "Batch", "Qty", "Unit Price", "Total"];
+    const tableColumn = ["Product", "Batch", "Qty", "Unit Price", "Total Price"];
     const tableRows = printSnapshot.cart.map((item: any) => [
       item.product_name,
-      item.batch_number,
-      item.quantity,
-      `Rs ${item.unit_price}`,
+      item.batch_number || "N/A",
+      item.quantity.toString(),
+      `Rs ${item.unit_price.toFixed(2)}`,
       `Rs ${item.total_price.toFixed(2)}`
     ]);
     
     autoTable(doc, {
-      startY: 75,
+      startY: 78,
       head: [tableColumn],
       body: tableRows,
-      theme: 'grid',
-      headStyles: { fillColor: [41, 128, 185] },
+      theme: 'striped',
+      headStyles: { 
+        fillColor: [79, 70, 229], 
+        textColor: 255, 
+        fontSize: 9,
+        fontStyle: 'bold',
+        halign: 'left'
+      },
+      bodyStyles: { 
+        fontSize: 9,
+        textColor: [51, 65, 85]
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252]
+      },
+      styles: {
+        cellPadding: 4,
+      },
+      margin: { left: 14, right: 14 },
     });
     
     // Footer / Totals
-    const finalY = (doc as any).lastAutoTable.finalY + 10;
+    const finalY = (doc as any).lastAutoTable.finalY + 12;
+    
+    doc.setFillColor(241, 245, 249);
+    doc.rect(125, finalY - 6, 71, 15, "F");
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(30, 41, 59);
+    doc.text("Total Pay:", 130, finalY + 3.5);
+    
+    doc.setTextColor(16, 185, 129);
     doc.setFontSize(14);
-    doc.text(`Grand Total: Rs ${printSnapshot.grandTotal.toFixed(2)}`, 140, finalY);
+    doc.text(`Rs ${printSnapshot.grandTotal.toFixed(2)}`, 155, finalY + 3.8);
     
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text("Terms & Conditions:", 14, finalY + 22);
+    doc.text("1. Medicines once sold cannot be returned without a valid prescription/bill.", 14, finalY + 26);
+    doc.text("2. Please store medicines under recommended conditions.", 14, finalY + 30);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(79, 70, 229);
     doc.setFontSize(10);
-    doc.setTextColor(150, 150, 150);
-    doc.text("Thank you for choosing Med-X Pharmacy!", 14, finalY + 20);
+    doc.text("Thank you for choosing Med-X Pharmacy!", 14, finalY + 39);
     
-    // Save PDF
     doc.save(`Invoice_${printSnapshot.invoiceNumber}.pdf`);
   };
 
   if (completedSale) {
     return (
       <div className="max-w-2xl mx-auto mt-10">
-        <Card className="text-center p-8 border-green-200 bg-green-50">
-          <CheckCircle className="mx-auto text-green-500 mb-4" size={64} />
-          <h2 className="text-3xl font-bold text-emerald-400 mb-2">Sale Completed!</h2>
-          <p className="text-slate-400 mb-6">Invoice Number: <strong className="text-white">{completedSale.invoice_number}</strong></p>
+        <Card className="text-center p-8 bg-slate-900 border-slate-800 shadow-2xl shadow-black/50 text-white">
+          <CheckCircle className="mx-auto text-emerald-400 mb-4 animate-pulse" size={64} />
+          <h2 className="text-3xl font-bold text-white mb-2">Sale Completed!</h2>
+          <p className="text-slate-400 mb-6">Invoice Number: <strong className="text-emerald-400 font-mono">{completedSale.invoice_number}</strong></p>
           <div className="flex justify-center gap-4">
-            <Button variant="outline" onClick={handlePrintPDF}>
+            <Button variant="outline" onClick={handlePrintPDF} className="bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-850 hover:text-white">
               <Printer className="mr-2" size={18} /> Print PDF Bill
             </Button>
-            <Button onClick={() => setCompletedSale(null)} className="bg-blue-600">
+            <Button onClick={() => setCompletedSale(null)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
               New Sale
             </Button>
           </div>
@@ -337,6 +461,19 @@ export default function POS() {
             
             <div className="space-y-4 flex-1">
               <div className="space-y-2">
+                <Label>Billing Branch</Label>
+                <Select value={branch} onValueChange={setBranch}>
+                  <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-900 border-slate-700 text-white">
+                    <SelectItem value="C-Scheme">C-Scheme Branch (Jaipur)</SelectItem>
+                    <SelectItem value="Mansarovar">Mansarovar Branch (Jaipur)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
                 <Label>Customer</Label>
                 <Select value={customerId} onValueChange={setCustomerId}>
                   <SelectTrigger>
@@ -358,7 +495,7 @@ export default function POS() {
                         placeholder="Customer Name" 
                         value={walkInName}
                         onChange={(e) => setWalkInName(e.target.value)}
-                        className="h-8 text-sm bg-slate-900 border-slate-700"
+                        className="h-8 text-sm bg-slate-900 border-slate-700 text-white"
                       />
                     </div>
                     <div className="space-y-1">
@@ -366,10 +503,15 @@ export default function POS() {
                       <Input 
                         placeholder="Phone Number" 
                         value={walkInPhone}
-                        onChange={(e) => setWalkInPhone(e.target.value)}
-                        className="h-8 text-sm bg-slate-900 border-slate-700"
+                        onChange={(e) => handlePhoneChange(e.target.value)}
+                        className="h-8 text-sm bg-slate-900 border-slate-700 text-white"
                       />
                     </div>
+                    {matchedCustomerId && (
+                      <div className="col-span-2 text-xs text-indigo-400 font-medium mt-1">
+                        ✓ Recognized Saved Customer: {walkInName}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

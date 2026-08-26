@@ -18,6 +18,7 @@ class Sale(Base):
     
     payment_method = Column(String, default="Cash") # Cash, Card, UPI
     status = Column(String, default="COMPLETED") # COMPLETED, REFUNDED
+    branch = Column(String, default="C-Scheme")
     
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
