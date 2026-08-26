@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import api from "../../services/api";
+import { useCachedGet } from "../../services/api";
 import { 
   Table, 
   TableBody, 
@@ -14,23 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Edit, Package } from "lucide-react";
 
 export default function ProductsList() {
-  const [products, setProducts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const res = await api.get("/products/");
-        setProducts(res.data);
-      } catch (error) {
-        console.error("Failed to fetch products", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProducts();
-  }, []);
+  const { data: products = [], loading } = useCachedGet<any[]>("/products/", []);
 
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(search.toLowerCase()) || 

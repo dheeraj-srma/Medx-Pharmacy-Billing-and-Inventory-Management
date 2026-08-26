@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import api from "../../../services/api";
+import { useCachedGet } from "../../../services/api";
 import { 
   Table, 
   TableBody, 
@@ -13,24 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Plus, Search, Eye } from "lucide-react";
 
 export default function PurchasesList() {
-  const [purchases, setPurchases] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    const fetchPurchases = async () => {
-      try {
-        // Assume suppliers are fetched together or we just display invoice/date
-        const res = await api.get("/purchases/");
-        setPurchases(res.data);
-      } catch (error) {
-        console.error("Failed to fetch purchases", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchPurchases();
-  }, []);
+  const { data: purchases = [], loading } = useCachedGet<any[]>("/purchases/", []);
 
   const filteredPurchases = purchases.filter(p => 
     (p.invoice_number && p.invoice_number.toLowerCase().includes(search.toLowerCase()))

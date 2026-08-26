@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import { 
@@ -17,6 +17,19 @@ export default function AdminLayout() {
   const { user } = useAuthStore();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    const handleNetworkStatus = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      setSyncing(customEvent.detail.syncing);
+    };
+
+    window.addEventListener("api-network-status", handleNetworkStatus);
+    return () => {
+      window.removeEventListener("api-network-status", handleNetworkStatus);
+    };
+  }, []);
 
   const navItems = [
     { name: "POS / Billing", path: "/admin/pos", icon: ShoppingCart },
@@ -106,7 +119,20 @@ export default function AdminLayout() {
             {navItems.find(i => location.pathname.startsWith(i.path) && i.path !== "/admin")?.name || "Dashboard"}
           </h1>
           <div className="flex items-center gap-4">
-            <div className="text-sm font-medium text-slate-400">
+            {/* Caching & Background Loading Status Indicator */}
+            <div 
+              className={`flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 transition-all duration-300 ${
+                syncing ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
+              }`}
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="text-xs font-semibold text-emerald-400 tracking-wide select-none">Syncing...</span>
+            </div>
+
+            <div className="text-sm font-medium text-slate-400 border-l border-slate-800 pl-4 h-5 flex items-center">
               {user?.full_name || user?.email || "Admin"}
             </div>
           </div>

@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import api from "../../../services/api";
+import { useState } from "react";
+import api, { useCachedGet } from "../../../services/api";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,13 +11,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Search, Sliders } from "lucide-react";
 
 export default function InventoryList() {
-  const [batches, setBatches] = useState<any[]>([]);
-  const [transactions, setTransactions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("batches");
   
   // Filters and Search
   const [search, setSearch] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
 
   // Adjustment Modal State
@@ -27,43 +25,28 @@ export default function InventoryList() {
   const [notes, setNotes] = useState("");
   const [isAdjusting, setIsAdjusting] = useState(false);
 
-  const fetchBatches = async () => {
-    try {
-      const statusParam = filterStatus !== "all" ? filterStatus : undefined;
-      const res = await api.get("/inventory/batches", {
-        params: { search: search || undefined, filter_status: statusParam }
-      });
-      setBatches(res.data);
-    } catch (error) {
-      console.error("Failed to fetch batches", error);
-    }
-  };
+  // SWR Caching & Background Loading for Batches & Transactions
+  const statusParam = filterStatus !== "all" ? filterStatus : undefined;
+  const { 
+    data: batches = [], 
+    loading: batchesLoading,
+    refetch: refetchBatches 
+  } = useCachedGet<any[]>("/inventory/batches", [], { 
+    search: appliedSearch || undefined, 
+    filter_status: statusParam 
+  });
 
-  const fetchTransactions = async () => {
-    try {
-      const res = await api.get("/inventory/transactions");
-      setTransactions(res.data);
-    } catch (error) {
-      console.error("Failed to fetch transactions", error);
-    }
-  };
+  const { 
+    data: transactions = [], 
+    loading: transactionsLoading,
+    refetch: refetchTransactions 
+  } = useCachedGet<any[]>("/inventory/transactions", []);
 
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      if (activeTab === "batches") {
-        await fetchBatches();
-      } else {
-        await fetchTransactions();
-      }
-      setLoading(false);
-    };
-    loadData();
-  }, [activeTab, filterStatus]);
+  const loading = activeTab === "batches" ? batchesLoading : transactionsLoading;
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchBatches();
+    setAppliedSearch(search);
   };
 
   const getStatusBadge = (batch: any) => {
@@ -99,7 +82,8 @@ export default function InventoryList() {
       setSelectedBatch(null);
       setQuantityChange("");
       setNotes("");
-      fetchBatches();
+      refetchBatches();
+      refetchTransactions();
     } catch (error: any) {
       console.error("Adjustment failed", error);
       alert(error.response?.data?.detail || "Adjustment failed");
@@ -166,7 +150,7 @@ export default function InventoryList() {
                   <SelectItem value="low_stock">Low Stock (≤10 qty)</SelectItem>
                 </SelectContent>
               </Select>
-              <Button type="button" onClick={fetchBatches} className="bg-slate-900 border border-slate-700 text-slate-300 hover:bg-slate-800">
+              <Button type="button" onClick={() => refetchBatches()} className="bg-slate-900 border border-slate-700 text-slate-300 hover:bg-slate-800">
                 Apply Filters
               </Button>
             </div>

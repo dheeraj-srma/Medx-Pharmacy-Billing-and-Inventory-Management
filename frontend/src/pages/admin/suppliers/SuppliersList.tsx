@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import api from "../../../services/api";
+import { useCachedGet } from "../../../services/api";
 import { 
   Table, 
   TableBody, 
@@ -14,23 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Edit } from "lucide-react";
 
 export default function SuppliersList() {
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    const fetchSuppliers = async () => {
-      try {
-        const res = await api.get("/suppliers/");
-        setSuppliers(res.data);
-      } catch (error) {
-        console.error("Failed to fetch suppliers", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchSuppliers();
-  }, []);
+  const { data: suppliers = [], loading } = useCachedGet<any[]>("/suppliers/", []);
 
   const filteredSuppliers = suppliers.filter(s => 
     s.name.toLowerCase().includes(search.toLowerCase()) || 
