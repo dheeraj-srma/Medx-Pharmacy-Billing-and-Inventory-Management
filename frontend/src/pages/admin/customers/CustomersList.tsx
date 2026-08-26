@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import api from "../../../services/api";
+import { useDataStore } from "../../../store/dataStore";
 import { 
   Table, 
   TableBody, 
@@ -11,25 +11,16 @@ import {
 import { Search } from "lucide-react";
 
 export default function CustomersList() {
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { customers, fetchCustomers } = useDataStore();
+  const { data: customersData, loading } = customers;
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    const fetchCustomers = async () => {
-      try {
-        const res = await api.get("/customers/");
-        setCustomers(res.data);
-      } catch (error) {
-        console.error("Failed to fetch customers", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    // No-op if data is fresh, background-sync if stale — no loading flash on revisit
     fetchCustomers();
-  }, []);
+  }, [fetchCustomers]);
 
-  const filteredCustomers = customers.filter(c => 
+  const filteredCustomers = customersData.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase()) || 
     (c.phone && c.phone.includes(search))
   );

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useCachedGet } from "../../services/api";
+import { useDataStore } from "../../store/dataStore";
 import { 
   Table, 
   TableBody, 
@@ -12,12 +12,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Edit, Package } from "lucide-react";
+import { useState } from "react";
 
 export default function ProductsList() {
+  const { products, fetchProducts } = useDataStore();
+  const { data: productsData, loading } = products;
   const [search, setSearch] = useState("");
-  const { data: products = [], loading } = useCachedGet<any[]>("/products/", []);
 
-  const filteredProducts = products.filter(p => 
+  useEffect(() => {
+    // No-op if data is fresh; background-sync if stale
+    fetchProducts();
+  }, [fetchProducts]);
+
+  const filteredProducts = productsData.filter(p => 
     p.name.toLowerCase().includes(search.toLowerCase()) || 
     (p.generic_name && p.generic_name.toLowerCase().includes(search.toLowerCase()))
   );

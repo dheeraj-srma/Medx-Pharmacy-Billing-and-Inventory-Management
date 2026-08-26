@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import api from "../../../services/api";
+import { useDataStore } from "../../../store/dataStore";
 import { 
   Table, 
   TableBody, 
@@ -12,25 +12,16 @@ import { Badge } from "@/components/ui/badge";
 import { Search } from "lucide-react";
 
 export default function SalesList() {
-  const [sales, setSales] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { sales, fetchSales } = useDataStore();
+  const { data: salesData, loading } = sales;
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    const fetchSales = async () => {
-      try {
-        const res = await api.get("/sales/");
-        setSales(res.data);
-      } catch (error) {
-        console.error("Failed to fetch sales", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    // No-op if data is fresh, background-sync if stale — no loading flash on revisit
     fetchSales();
-  }, []);
+  }, [fetchSales]);
 
-  const filteredSales = sales.filter(s => 
+  const filteredSales = salesData.filter(s => 
     s.invoice_number.toLowerCase().includes(search.toLowerCase())
   );
 

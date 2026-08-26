@@ -1,5 +1,6 @@
-import { useState } from "react";
-import api, { useCachedGet } from "../../../services/api";
+import { useState, useEffect, useCallback } from "react";
+import api from "../../../services/api";
+import { useDataStore } from "../../../store/dataStore";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +13,7 @@ import { Search, Sliders } from "lucide-react";
 
 export default function InventoryList() {
   const [activeTab, setActiveTab] = useState("batches");
-  
+
   // Filters and Search
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
@@ -25,29 +26,44 @@ export default function InventoryList() {
   const [notes, setNotes] = useState("");
   const [isAdjusting, setIsAdjusting] = useState(false);
 
-  // SWR Caching & Background Loading for Batches & Transactions
-  const statusParam = filterStatus !== "all" ? filterStatus : undefined;
-  const { 
-    data: batches = [], 
-    loading: batchesLoading,
-    refetch: refetchBatches 
-  } = useCachedGet<any[]>("/inventory/batches", [], { 
-    search: appliedSearch || undefined, 
-    filter_status: statusParam 
-  });
-
-  const { 
-    data: transactions = [], 
-    loading: transactionsLoading,
-    refetch: refetchTransactions 
-  } = useCachedGet<any[]>("/inventory/transactions", []);
+  // Global data store
+  const { batches: batchesSlice, transactions: transactionsSlice, fetchBatches, fetchTransactions, invalidate } = useDataStore();
+  const { data: batches = [], loading: batchesLoading } = batchesSlice;
+  const { data: transactions = [], loading: transactionsLoading } = transactionsSlice;
 
   const loading = activeTab === "batches" ? batchesLoading : transactionsLoading;
+
+  // Build filter params
+  const statusParam = filterStatus !== "all" ? filterStatus : undefined;
+  const filterParams = {
+    search: appliedSearch || undefined,
+    filter_status: statusParam,
+  };
+
+  // Fetch on mount and whenever applied filters change
+  useEffect(() => {
+    fetchBatches(filterParams, true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appliedSearch, filterStatus]);
+
+  // Transactions: fetch once on mount, no filters
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setAppliedSearch(search);
   };
+
+  const refetchBatches = useCallback(() => {
+    fetchBatches(filterParams, true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appliedSearch, filterStatus]);
+
+  const refetchTransactions = useCallback(() => {
+    fetchTransactions(true);
+  }, [fetchTransactions]);
 
   const getStatusBadge = (batch: any) => {
     const today = new Date();
@@ -82,6 +98,9 @@ export default function InventoryList() {
       setSelectedBatch(null);
       setQuantityChange("");
       setNotes("");
+      // Invalidate inventory slices so next fetch is fresh
+      invalidate('batches');
+      invalidate('transactions');
       refetchBatches();
       refetchTransactions();
     } catch (error: any) {
@@ -150,7 +169,7 @@ export default function InventoryList() {
                   <SelectItem value="low_stock">Low Stock (≤10 qty)</SelectItem>
                 </SelectContent>
               </Select>
-              <Button type="button" onClick={() => refetchBatches()} className="bg-slate-900 border border-slate-700 text-slate-300 hover:bg-slate-800">
+              <Button type="button" onClick={refetchBatches} className="bg-slate-900 border border-slate-700 text-slate-300 hover:bg-slate-800">
                 Apply Filters
               </Button>
             </div>

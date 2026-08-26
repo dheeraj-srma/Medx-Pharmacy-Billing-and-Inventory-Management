@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import api from "../../../services/api";
+import { useState, useCallback } from "react";
+import { useCachedGet } from "../../../services/api";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -17,75 +17,74 @@ import {
   Warehouse, 
   AlertTriangle, 
   Calendar,
-  Clock 
+  Clock,
+  RefreshCw
 } from "lucide-react";
 
 export default function Reports() {
   const [activeTab, setActiveTab] = useState("sales");
-  const [loading, setLoading] = useState(true);
 
   // Date Range (default: last 30 days)
   const todayStr = new Date().toISOString().split("T")[0];
   const defaultStartStr = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-  
+
   const [startDate, setStartDate] = useState(defaultStartStr);
   const [endDate, setEndDate] = useState(todayStr);
 
-  // Report Data States
-  const [salesReport, setSalesReport] = useState<any>(null);
-  const [purchaseReport, setPurchaseReport] = useState<any>(null);
-  const [inventoryReport, setInventoryReport] = useState<any>(null);
+  // Applied date params — only updated when user clicks Generate
+  const [appliedStart, setAppliedStart] = useState(defaultStartStr);
+  const [appliedEnd, setAppliedEnd] = useState(todayStr);
 
-  const fetchSalesReport = async () => {
-    try {
-      const res = await api.get("/reports/sales", {
-        params: { start_date: startDate, end_date: endDate }
-      });
-      setSalesReport(res.data);
-    } catch (e) {
-      console.error("Failed to fetch sales report", e);
-    }
-  };
+  // ── Cached GET for each report tab ──────────────────────────────────────
+  // Cache key encodes the date range, so different date ranges are cached separately.
+  const {
+    data: salesReport,
+    loading: salesLoading,
+    syncing: salesSyncing,
+    refetch: refetchSales,
+  } = useCachedGet<any>(
+    "/reports/sales",
+    null,
+    { start_date: appliedStart, end_date: appliedEnd }
+  );
 
-  const fetchPurchaseReport = async () => {
-    try {
-      const res = await api.get("/reports/purchases", {
-        params: { start_date: startDate, end_date: endDate }
-      });
-      setPurchaseReport(res.data);
-    } catch (e) {
-      console.error("Failed to fetch purchase report", e);
-    }
-  };
+  const {
+    data: purchaseReport,
+    loading: purchasesLoading,
+    syncing: purchasesSyncing,
+    refetch: refetchPurchases,
+  } = useCachedGet<any>(
+    "/reports/purchases",
+    null,
+    { start_date: appliedStart, end_date: appliedEnd }
+  );
 
-  const fetchInventoryReport = async () => {
-    try {
-      const res = await api.get("/reports/inventory-valuation");
-      setInventoryReport(res.data);
-    } catch (e) {
-      console.error("Failed to fetch inventory report", e);
-    }
-  };
+  const {
+    data: inventoryReport,
+    loading: inventoryLoading,
+    syncing: inventorySyncing,
+    refetch: refetchInventory,
+  } = useCachedGet<any>("/reports/inventory-valuation", null);
 
-  const loadData = async () => {
-    setLoading(true);
-    if (activeTab === "sales") {
-      await fetchSalesReport();
-    } else if (activeTab === "purchases") {
-      await fetchPurchaseReport();
-    } else if (activeTab === "inventory") {
-      await fetchInventoryReport();
-    }
-    setLoading(false);
-  };
+  // Derive active-tab loading/syncing state
+  const loading =
+    activeTab === "sales" ? salesLoading :
+    activeTab === "purchases" ? purchasesLoading :
+    inventoryLoading;
 
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
+  const syncing =
+    activeTab === "sales" ? salesSyncing :
+    activeTab === "purchases" ? purchasesSyncing :
+    inventorySyncing;
 
-  const handleGenerate = () => {
-    loadData();
-  };
+  const handleGenerate = useCallback(() => {
+    setAppliedStart(startDate);
+    setAppliedEnd(endDate);
+    // Force refetch with new params
+    if (activeTab === "sales") refetchSales();
+    else if (activeTab === "purchases") refetchPurchases();
+    else refetchInventory();
+  }, [activeTab, startDate, endDate, refetchSales, refetchPurchases, refetchInventory]);
 
   // PDF Generators
   const exportSalesReportPDF = () => {
@@ -322,6 +321,13 @@ export default function Reports() {
         </div>
       ) : (
         <>
+          {/* Background sync indicator */}
+          {syncing && (
+            <div className="flex items-center gap-2 text-xs text-indigo-400 animate-pulse">
+              <RefreshCw size={12} className="animate-spin" /> Refreshing data...
+            </div>
+          )}
+
           {activeTab === "sales" && salesReport && (
             <div className="space-y-6 animate-fade-in">
               {/* KPI Summary Cards */}

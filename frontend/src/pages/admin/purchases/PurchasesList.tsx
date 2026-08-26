@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useCachedGet } from "../../../services/api";
+import { useDataStore } from "../../../store/dataStore";
 import { 
   Table, 
   TableBody, 
@@ -13,10 +13,16 @@ import { Button } from "@/components/ui/button";
 import { Plus, Search, Eye } from "lucide-react";
 
 export default function PurchasesList() {
+  const { purchases, fetchPurchases } = useDataStore();
+  const { data: purchasesData, loading } = purchases;
   const [search, setSearch] = useState("");
-  const { data: purchases = [], loading } = useCachedGet<any[]>("/purchases/", []);
 
-  const filteredPurchases = purchases.filter(p => 
+  useEffect(() => {
+    // No-op if data is fresh; background-sync if stale
+    fetchPurchases();
+  }, [fetchPurchases]);
+
+  const filteredPurchases = purchasesData.filter(p => 
     (p.invoice_number && p.invoice_number.toLowerCase().includes(search.toLowerCase()))
   );
 

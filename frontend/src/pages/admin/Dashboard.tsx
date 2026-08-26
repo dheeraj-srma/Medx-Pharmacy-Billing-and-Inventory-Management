@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import api from "../../services/api";
+import { useEffect } from "react";
+import { useDataStore } from "../../store/dataStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { IndianRupee, FileText, AlertTriangle, Clock, Activity } from "lucide-react";
 import {
@@ -21,38 +21,14 @@ import {
 } from "@/components/ui/table";
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<any>(null);
-  const [salesData, setSalesData] = useState<any[]>([]);
-  const [recentSales, setRecentSales] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { dashboard, fetchDashboard } = useDataStore();
+  const { data: { stats, salesChart, recentSales }, loading } = dashboard;
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        const [statsRes, chartRes, recentRes] = await Promise.all([
-          api.get("/analytics/dashboard-stats"),
-          api.get("/analytics/sales-chart?days=7"),
-          api.get("/analytics/recent-sales?limit=5")
-        ]);
-        
-        setStats(statsRes.data);
-        
-        // Format chart data date strings for display
-        const formattedChartData = chartRes.data.map((d: any) => ({
-          ...d,
-          day: new Date(d.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-        }));
-        setSalesData(formattedChartData);
-        setRecentSales(recentRes.data);
-      } catch (error) {
-        console.error("Failed to fetch dashboard data", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchDashboardData();
-  }, []);
+    // If data is already loaded and fresh, this is a no-op (returns immediately).
+    // If stale, it background-syncs without showing the loading spinner.
+    fetchDashboard();
+  }, [fetchDashboard]);
 
   if (loading || !stats) {
     return <div className="p-8 text-center text-slate-500 flex items-center justify-center h-64">
@@ -122,7 +98,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="h-[300px] mt-4">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={salesData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <AreaChart data={salesChart} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4}/>

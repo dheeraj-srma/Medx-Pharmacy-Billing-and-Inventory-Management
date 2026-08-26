@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
+import { useDataStore } from "../store/dataStore";
+
 import { 
   LayoutDashboard, 
   Package, 
@@ -15,9 +17,24 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 export default function AdminLayout() {
   const { user } = useAuthStore();
+  const { fetchProducts, fetchCustomers, fetchSuppliers, fetchSales, fetchPurchases, fetchDashboard } = useDataStore();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [syncing, setSyncing] = useState(false);
+
+  // Eager prefetch: warm the cache for all major modules on layout mount.
+  // fetch* calls are no-ops if data is already fresh (< 60s old).
+  useEffect(() => {
+    fetchDashboard();
+    fetchProducts();
+    fetchCustomers();
+    fetchSuppliers();
+    fetchSales();
+    fetchPurchases();
+
+  // Run once on mount only
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const handleNetworkStatus = (e: Event) => {

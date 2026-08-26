@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useCachedGet } from "../../../services/api";
+import { useDataStore } from "../../../store/dataStore";
 import { 
   Table, 
   TableBody, 
@@ -14,10 +14,16 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Edit } from "lucide-react";
 
 export default function SuppliersList() {
+  const { suppliers, fetchSuppliers } = useDataStore();
+  const { data: suppliersData, loading } = suppliers;
   const [search, setSearch] = useState("");
-  const { data: suppliers = [], loading } = useCachedGet<any[]>("/suppliers/", []);
 
-  const filteredSuppliers = suppliers.filter(s => 
+  useEffect(() => {
+    // No-op if data is fresh; background-sync if stale
+    fetchSuppliers();
+  }, [fetchSuppliers]);
+
+  const filteredSuppliers = suppliersData.filter(s => 
     s.name.toLowerCase().includes(search.toLowerCase()) || 
     (s.company_name && s.company_name.toLowerCase().includes(search.toLowerCase()))
   );
