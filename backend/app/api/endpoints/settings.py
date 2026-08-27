@@ -17,12 +17,13 @@ def get_or_create_settings(db: Session) -> StoreSettings:
     settings = db.query(StoreSettings).first()
     if not settings:
         settings = StoreSettings(
-            store_name="MedEx Pharmacy",
+            store_name="MedX Pharmacy",
             phone="+91 9145887170",
-            email="contact@medex.com",
-            address="Mumbai, India",
-            gstin="",
-            default_tax_rate=12.0
+            email="medxpharmacy7170@gmail.com",
+            address="Plot No. 20A, Chandan Vihar, Near Coaching Hub, Jaipur, Rajasthan",
+            gstin="08GSFPD9061R1ZY",
+            default_tax_rate=12.0,
+            print_gstin=True
         )
         db.add(settings)
         db.commit()

@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Edit, Package, Trash2 } from "lucide-react";
+import { Plus, Search, Edit, Trash2 } from "lucide-react";
+import { MedicineIcon } from "../../lib/medicineIcon";
 
 export default function ProductsList() {
   const { products, fetchProducts, invalidate } = useDataStore();
@@ -104,10 +105,16 @@ export default function ProductsList() {
                           src={product.image_url.startsWith("http") ? product.image_url : `http://localhost:8000${product.image_url}`} 
                           alt={product.name} 
                           className="w-full h-full object-cover" 
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            target.style.display = "none";
+                            target.parentElement?.querySelector(".img-fallback")?.classList.remove("hidden");
+                          }}
                         />
-                      ) : (
-                        <Package className="text-slate-500" size={20} />
-                      )}
+                      ) : null}
+                      <div className={`img-fallback flex items-center justify-center w-full h-full ${product.image_url ? "hidden" : ""}`}>
+                        <MedicineIcon product={product} size={20} />
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell>

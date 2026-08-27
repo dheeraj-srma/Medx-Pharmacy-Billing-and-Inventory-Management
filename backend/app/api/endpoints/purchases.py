@@ -58,7 +58,8 @@ def create_purchase(
             # Find or Create InventoryBatch
             batch = db.query(InventoryBatch).filter(
                 InventoryBatch.product_id == item.product_id,
-                InventoryBatch.batch_number == item.batch_number
+                InventoryBatch.batch_number == item.batch_number,
+                InventoryBatch.branch == purchase.branch
             ).first()
             
             if not batch:
@@ -71,7 +72,8 @@ def create_purchase(
                     purchase_price=item.purchase_price,
                     mrp=item.mrp,
                     selling_price=item.selling_price,
-                    supplier_id=purchase.supplier_id
+                    supplier_id=purchase.supplier_id,
+                    branch=purchase.branch
                 )
                 db.add(batch)
                 db.flush()
@@ -95,6 +97,7 @@ def create_purchase(
                 reference_id=str(db_purchase.id),
                 notes=f"Invoice: {purchase.invoice_number}",
                 user_id=current_user.id,
+                branch=purchase.branch,
                 timestamp=datetime.now(timezone.utc)
             )
             db.add(transaction)

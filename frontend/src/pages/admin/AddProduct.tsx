@@ -456,7 +456,12 @@ export default function AddProduct() {
                 <div className="space-y-4">
                   <div className="aspect-square bg-slate-950 rounded-lg border-2 border-dashed border-slate-700 flex flex-col items-center justify-center overflow-hidden relative group hover:border-indigo-500 transition-colors">
                     {imagePreview ? (
-                      <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                      <img 
+                        src={imagePreview} 
+                        alt="Preview" 
+                        className="w-full h-full object-cover" 
+                        onError={() => setImagePreview(null)}
+                      />
                     ) : (
                       <div className="flex flex-col items-center text-slate-400 p-4 text-center">
                         <Upload size={32} className="mb-2 text-indigo-400" />

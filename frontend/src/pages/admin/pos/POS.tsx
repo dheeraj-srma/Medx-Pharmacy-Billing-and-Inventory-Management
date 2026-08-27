@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ShoppingCart, Trash2, Search, Printer, CheckCircle, Package, Calendar, AlertCircle } from "lucide-react";
+import { ShoppingCart, Trash2, Search, Printer, CheckCircle, Calendar, AlertCircle } from "lucide-react";
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -143,15 +143,33 @@ export default function POS() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [completedSale, setCompletedSale] = useState<any>(null);
   const [matchedCustomerId, setMatchedCustomerId] = useState<number | null>(null);
-  const [branch, setBranch] = useState("C-Scheme");
+  const [branch, setBranch] = useState("Branch 1");
+  const [storeSettings, setStoreSettings] = useState<any>(null);
+  const [discountPercent, setDiscountPercent] = useState<number>(0);
+  const [taxPercent, setTaxPercent] = useState<number>(0);
   
   const [printSnapshot, setPrintSnapshot] = useState<any>(null);
 
   useEffect(() => {
-    // Fetch available batches and customers
-    api.get("/inventory/active-batches").then(res => setActiveBatches(res.data)).catch(console.error);
+    // Fetch available batches for the selected branch
+    api.get(`/inventory/active-batches?branch=${branch}`).then(res => setActiveBatches(res.data)).catch(console.error);
+  }, [branch]);
+
+  useEffect(() => {
+    api.get("/settings/").then(res => setStoreSettings(res.data)).catch(console.error);
     api.get("/customers/").then(res => setCustomers(res.data)).catch(console.error);
   }, []);
+
+  const handleBranchChange = (newBranch: string) => {
+    if (cart.length > 0) {
+      if (window.confirm("Changing the branch will clear your current cart. Do you want to proceed?")) {
+        setCart([]);
+        setBranch(newBranch);
+      }
+    } else {
+      setBranch(newBranch);
+    }
+  };
 
   // Close dropdown when clicked outside
   useEffect(() => {
@@ -418,7 +436,11 @@ export default function POS() {
     }));
   };
 
-  const grandTotal = cart.reduce((sum, item) => sum + item.total_price, 0);
+  const subtotal = cart.reduce((sum, item) => sum + item.total_price, 0);
+  const discountAmount = subtotal * (discountPercent / 100);
+  const taxableAmount = subtotal - discountAmount;
+  const taxAmount = taxableAmount * (taxPercent / 100);
+  const grandTotal = taxableAmount + taxAmount;
 
   const handlePhoneChange = (val: string) => {
     let cleaned = val.replace(/[^\d+]/g, "");
@@ -483,7 +505,9 @@ export default function POS() {
 
       const payload = {
         customer_id: finalCustomerId,
-        total_amount: grandTotal,
+        total_amount: subtotal,
+        tax_amount: taxAmount,
+        discount_amount: discountAmount,
         grand_total: grandTotal,
         payment_method: paymentMethod,
         branch: branch,
@@ -501,6 +525,11 @@ export default function POS() {
 
       setPrintSnapshot({
         cart: [...cart],
+        subtotal,
+        discountPercent,
+        discountAmount,
+        taxPercent,
+        taxAmount,
         grandTotal,
         customerName: custName,
         customerPhone: custPhone,
@@ -511,12 +540,14 @@ export default function POS() {
 
       setCompletedSale(res.data);
       setCart([]);
+      setDiscountPercent(0);
+      setTaxPercent(0);
       setWalkInName("");
       setWalkInPhone("");
       setMatchedCustomerId(null);
       
       // Refresh batches to reflect new quantities
-      api.get("/inventory/active-batches").then(r => setActiveBatches(r.data));
+      api.get(`/inventory/active-batches?branch=${branch}`).then(r => setActiveBatches(r.data));
       
     } catch (error: any) {
       console.error("Checkout failed", error);
@@ -526,74 +557,100 @@ export default function POS() {
     }
   };
 
-  const handlePrintPDF = () => {
+  const loadLogo = (): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = "/logo.png";
+      img.onload = () => resolve(img);
+      img.onerror = (err) => reject(err);
+    });
+  };
+
+  const handlePrintPDF = async () => {
     if (!printSnapshot) return;
     
     const doc = new jsPDF();
     
-    doc.setDrawColor(79, 70, 229);
-    doc.setLineWidth(1.5);
-    doc.line(14, 15, 196, 15);
+    // Top Accent Bar (Inspired by HTML template)
+    doc.setFillColor(67, 56, 202); // #4338CA
+    doc.rect(14, 15, 182, 3, "F");
+
+    let textXOffset = 14;
+    try {
+      const logoImg = await loadLogo();
+      doc.addImage(logoImg, "PNG", 14, 22, 12, 12);
+      textXOffset = 28;
+    } catch (e) {
+      console.error("Failed to load logo.png, printing without it", e);
+    }
     
+    // Title
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(24);
-    doc.setTextColor(30, 41, 59);
-    doc.text("Med-X Pharmacy", 14, 28);
+    doc.setFontSize(22);
+    doc.setTextColor(67, 56, 202); // #4338CA
+    doc.text("Med-X Pharmacy", textXOffset, 31);
     
-    const branchAddress = printSnapshot.branch === "Mansarovar"
-      ? "Sector 10, Mansarovar, Jaipur, Rajasthan"
-      : "C-Scheme, Jaipur, Rajasthan";
-    const branchPhone = printSnapshot.branch === "Mansarovar"
-      ? "+91 141-8765432"
-      : "+91 9145887170";
-    const branchGstin = printSnapshot.branch === "Mansarovar"
-      ? "GSTIN: 22AAAAA0000A2Z6"
-      : "GSTIN: 22AAAAA0000A1Z5";
+    const isBranch1 = printSnapshot.branch === "Branch 1";
+    const branchAddress = isBranch1
+      ? "Plot No. 20A, Chandan Vihar, Near Coaching Hub, Jaipur, Rajasthan"
+      : "House No. 192-A, Shivpuri, BudhiSingh Pura, Jaipur, Rajasthan";
+    const branchPhone = isBranch1
+      ? "+91 9145887170"
+      : "+91 8307407566";
+    const branchEmail = "medxpharmacy7170@gmail.com";
+    
+    const printGstinEnabled = storeSettings?.print_gstin ?? true;
+    let branchGstin = "";
+    if (isBranch1 && printGstinEnabled) {
+      branchGstin = "GSTIN: 08GSFPD9061R1ZY";
+    }
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
+    doc.setFontSize(8.5);
     doc.setTextColor(100, 116, 139);
-    doc.text(branchAddress, 14, 34);
-    doc.text(`Contact: ${branchPhone} | support@medex.com`, 14, 39);
-    doc.text(branchGstin, 14, 44);
+    doc.text(branchAddress, textXOffset, 37);
     
-    doc.setFillColor(79, 70, 229);
-    doc.rect(130, 22, 66, 8, "F");
+    let contactLine = `Contact: ${branchPhone} | ${branchEmail}`;
+    if (branchGstin) {
+      contactLine += ` | ${branchGstin}`;
+    }
+    doc.text(contactLine, textXOffset, 42);
+    
+    // Badge Label
+    doc.setFillColor(67, 56, 202);
+    doc.rect(140, 22, 56, 8, "F");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setTextColor(255, 255, 255);
-    doc.text("RETAIL BILL / INVOICE", 144, 27.5);
+    doc.text("RETAIL BILL / INVOICE", 145, 27.5);
     
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226, 232, 240);
+    // Info panels (Invoice & Customer details)
+    doc.setFillColor(247, 248, 252);
+    doc.setDrawColor(230, 231, 238);
     doc.setLineWidth(0.5);
     doc.rect(14, 50, 182, 22, "FD");
     
     doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(107, 114, 128);
+    doc.text("INVOICE DETAILS", 18, 55);
+    doc.text("CUSTOMER DETAILS", 115, 55);
+    
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139);
-    doc.text("INVOICE NO:", 18, 57);
-    doc.text("DATE & TIME:", 18, 63);
-    doc.text("BRANCH:", 18, 69);
+    doc.text("Invoice No:", 18, 61);
+    doc.text("Date:", 18, 67);
+    
+    doc.text("Name:", 115, 61);
+    doc.text("Phone:", 115, 67);
     
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(15, 23, 42);
-    doc.text(printSnapshot.invoiceNumber, 48, 57);
-    doc.text(printSnapshot.date, 48, 63);
-    doc.text(printSnapshot.branch, 48, 69);
+    doc.setTextColor(28, 30, 41);
+    doc.text(printSnapshot.invoiceNumber, 42, 61);
+    doc.text(printSnapshot.date, 42, 67);
     
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139);
-    doc.text("CUSTOMER:", 115, 57);
-    doc.text("PHONE:", 115, 63);
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(15, 23, 42);
-    doc.text(printSnapshot.customerName, 145, 57);
-    doc.text(printSnapshot.customerPhone, 145, 63);
+    doc.text(printSnapshot.customerName, 130, 61);
+    doc.text(printSnapshot.customerPhone, 130, 67);
     
     const tableData = printSnapshot.cart.map((item: any, index: number) => [
       index + 1,
@@ -602,72 +659,100 @@ export default function POS() {
       item.is_loose 
         ? `${item.packs}p + ${item.loose_tablets}t`
         : `${item.quantity}`,
-      item.is_loose
-        ? `₹${(item.unit_price / item.tablets_per_pack).toFixed(2)} (tab)`
-        : `₹${item.unit_price.toFixed(2)}`,
-      `₹${item.total_price.toFixed(2)}`
+      `Rs. ${item.is_loose
+        ? (item.unit_price / item.tablets_per_pack).toFixed(2)
+        : item.unit_price.toFixed(2)}`,
+      `${printSnapshot.discountPercent}%`,
+      `${printSnapshot.taxPercent}%`,
+      `Rs. ${item.total_price.toFixed(2)}`
     ]);
 
     autoTable(doc, {
       startY: 78,
-      head: [["#", "Product Description", "Batch No", "Qty", "Rate (₹)", "Amount (₹)"]],
+      head: [["#", "Product", "Batch", "Qty", "Unit Price", "Discount", "Tax", "Total Price"]],
       body: tableData,
       theme: 'grid',
       headStyles: { 
-        fillColor: [79, 70, 229], 
+        fillColor: [67, 56, 202], 
         textColor: 255, 
         fontStyle: 'bold',
         halign: 'left',
         fontSize: 8.5
       },
       columnStyles: {
-        0: { halign: 'center', cellWidth: 10 },
-        1: { cellWidth: 70 },
-        2: { halign: 'center', cellWidth: 32 },
-        3: { halign: 'center', cellWidth: 16 },
-        4: { halign: 'right', cellWidth: 26 },
-        5: { halign: 'right', cellWidth: 28 },
+        0: { halign: 'center', cellWidth: 8 },
+        1: { cellWidth: 54 },
+        2: { halign: 'center', cellWidth: 26 },
+        3: { halign: 'center', cellWidth: 14 },
+        4: { halign: 'right', cellWidth: 22 },
+        5: { halign: 'center', cellWidth: 18 },
+        6: { halign: 'center', cellWidth: 16 },
+        7: { halign: 'right', cellWidth: 24 },
       },
       styles: {
         fontSize: 8,
         cellPadding: 3,
-        textColor: [51, 65, 85]
+        textColor: [28, 30, 41]
       },
       alternateRowStyles: {
-        fillColor: [248, 250, 252]
+        fillColor: [251, 251, 254]
       }
     });
 
     const finalY = (doc as any).lastAutoTable.finalY + 8;
     
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226, 232, 240);
-    doc.rect(125, finalY, 71, 14, "FD");
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor(15, 23, 42);
-    doc.text("Grand Total:", 130, finalY + 9);
-    doc.setFontSize(13);
-    doc.setTextColor(79, 70, 229);
-    doc.text(`₹${printSnapshot.grandTotal.toFixed(2)}`, 160, finalY + 9);
-    
-    doc.setDrawColor(203, 213, 225);
-    doc.setLineDashPattern([1, 1], 0);
-    doc.line(14, finalY + 20, 196, finalY + 20);
-    doc.setLineDashPattern([], 0);
+    // Draw breakdown box
+    doc.setFillColor(247, 248, 252);
+    doc.setDrawColor(230, 231, 238);
+    doc.rect(120, finalY, 76, 32, "FD");
     
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    doc.setTextColor(148, 163, 184);
-    doc.text("Terms & Conditions:", 14, finalY + 24);
-    doc.text("1. Medicines once sold cannot be returned without a valid prescription/bill.", 14, finalY + 28);
-    doc.text("2. Please store medicines under recommended conditions.", 14, finalY + 32);
+    doc.setFontSize(8.5);
+    doc.setTextColor(100, 116, 139);
+    
+    // Row 1: Subtotal
+    doc.text("Subtotal:", 124, finalY + 7);
+    doc.text(`Rs. ${printSnapshot.subtotal.toFixed(2)}`, 192, finalY + 7, { align: "right" });
+    
+    // Row 2: Discount
+    doc.text(`Discount (${printSnapshot.discountPercent}%):`, 124, finalY + 14);
+    doc.text(`-Rs. ${printSnapshot.discountAmount.toFixed(2)}`, 192, finalY + 14, { align: "right" });
+    
+    // Row 3: Tax
+    doc.text(`Tax (${printSnapshot.taxPercent}%):`, 124, finalY + 21);
+    doc.text(`+Rs. ${printSnapshot.taxAmount.toFixed(2)}`, 192, finalY + 21, { align: "right" });
+    
+    // Draw a divider line
+    doc.setDrawColor(230, 231, 238);
+    doc.line(124, finalY + 24, 192, finalY + 24);
+    
+    // Row 4: Total Pay
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.setTextColor(67, 56, 202);
+    doc.text("Total Pay:", 124, finalY + 29);
+    doc.text(`Rs. ${printSnapshot.grandTotal.toFixed(2)}`, 192, finalY + 29, { align: "right" });
+    
+    doc.setDrawColor(230, 231, 238);
+    doc.line(14, finalY + 38, 196, finalY + 38);
     
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(79, 70, 229);
+    doc.setFontSize(7.5);
+    doc.setTextColor(107, 114, 128);
+    doc.text("TERMS & CONDITIONS:", 14, finalY + 42);
+    
+    doc.setFont("helvetica", "normal");
+    doc.text("1. Medicines once sold cannot be returned without a valid prescription/bill.", 14, finalY + 46);
+    doc.text("2. Please store medicines under recommended conditions.", 14, finalY + 50);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(67, 56, 202);
     doc.setFontSize(10);
-    doc.text("Thank you for choosing Med-X Pharmacy!", 14, finalY + 40);
+    doc.text("Thank you for choosing Med-X Pharmacy!", 14, finalY + 58);
+
+    // Bottom Footer Strip
+    doc.setFillColor(67, 56, 202);
+    doc.rect(14, finalY + 62, 182, 1, "F");
     
     doc.save(`Invoice_${printSnapshot.invoiceNumber}.pdf`);
   };
@@ -822,7 +907,7 @@ export default function POS() {
                 {cart.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-24 text-slate-500">
-                      <Package className="mx-auto text-slate-600 mb-2" size={32} />
+                      <ShoppingCart className="mx-auto text-slate-600 mb-2" size={32} />
                       <p className="font-medium text-slate-400">Cart is empty</p>
                       <p className="text-xs text-slate-600 mt-0.5">Use the search box above to add medicines</p>
                     </TableCell>
@@ -938,13 +1023,13 @@ export default function POS() {
             <div className="space-y-4 flex-1">
               <div className="space-y-2">
                 <Label className="text-slate-300">Billing Branch</Label>
-                <Select value={branch} onValueChange={setBranch}>
+                <Select value={branch} onValueChange={handleBranchChange}>
                   <SelectTrigger className="bg-slate-950 border-slate-700 text-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-700 text-white">
-                    <SelectItem value="C-Scheme">C-Scheme Branch (Jaipur)</SelectItem>
-                    <SelectItem value="Mansarovar">Mansarovar Branch (Jaipur)</SelectItem>
+                    <SelectItem value="Branch 1">Branch 1 (Chandan Vihar)</SelectItem>
+                    <SelectItem value="Branch 2">Branch 2 (Shivpuri)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1007,15 +1092,44 @@ export default function POS() {
               </div>
             </div>
 
-            <div className="border-t border-slate-800 pt-4 space-y-2">
-              <div className="flex justify-between text-slate-400">
+            <div className="border-t border-slate-800 pt-4 space-y-3">
+              <div className="flex justify-between text-slate-400 text-sm">
                 <span>Subtotal ({cart.length} items)</span>
-                <span className="font-mono">₹{grandTotal.toFixed(2)}</span>
+                <span className="font-mono">₹{subtotal.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-slate-400">
-                <span>Discount</span>
-                <span className="font-mono">₹0.00</span>
+              
+              <div className="flex justify-between items-center text-slate-400 text-sm">
+                <div className="flex items-center gap-1">
+                  <span>Discount (</span>
+                  <input 
+                    type="number" 
+                    min="0" 
+                    max="100" 
+                    value={discountPercent || ""} 
+                    onChange={(e) => setDiscountPercent(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
+                    className="w-12 h-6 text-center bg-slate-950 border border-slate-800 rounded text-slate-200 text-xs px-1 font-mono focus:outline-none focus:border-indigo-500"
+                  />
+                  <span>%)</span>
+                </div>
+                <span className="font-mono text-rose-450">-₹{discountAmount.toFixed(2)}</span>
               </div>
+
+              <div className="flex justify-between items-center text-slate-400 text-sm">
+                <div className="flex items-center gap-1">
+                  <span>Tax (</span>
+                  <input 
+                    type="number" 
+                    min="0" 
+                    max="100" 
+                    value={taxPercent || ""} 
+                    onChange={(e) => setTaxPercent(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
+                    className="w-12 h-6 text-center bg-slate-950 border border-slate-800 rounded text-slate-200 text-xs px-1 font-mono focus:outline-none focus:border-indigo-500"
+                  />
+                  <span>%)</span>
+                </div>
+                <span className="font-mono text-indigo-400">+₹{taxAmount.toFixed(2)}</span>
+              </div>
+
               <div className="flex justify-between items-center pt-4 border-t border-dashed border-slate-700">
                 <span className="text-xl font-bold text-slate-200">Total Pay</span>
                 <span className="text-3xl font-bold text-emerald-400 font-mono">₹{grandTotal.toFixed(2)}</span>

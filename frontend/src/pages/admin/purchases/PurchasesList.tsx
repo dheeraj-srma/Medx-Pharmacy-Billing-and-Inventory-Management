@@ -76,7 +76,7 @@ export default function PurchasesList() {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(100, 116, 139);
-    doc.text(`Inward Stock Receipt | Branch: ${purchaseDetail.branch || "Main"}`, 14, 34);
+    doc.text(`Inward Stock Receipt | Branch: ${purchaseDetail.branch || "Branch 1"}`, 14, 34);
     doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 39);
     
     // Invoice Badge
@@ -240,7 +240,7 @@ export default function PurchasesList() {
                   </TableCell>
                   <TableCell>
                     <span className="text-xs text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                      {purchase.branch || "C-Scheme"}
+                      {purchase.branch || "Branch 1"}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -328,7 +328,7 @@ export default function PurchasesList() {
                         Date: <span className="text-white">{purchaseDetail.purchase_date}</span>
                       </div>
                       <div className="text-sm font-medium text-slate-200">
-                        Branch: <span className="text-white">{purchaseDetail.branch || "C-Scheme"}</span>
+                        Branch: <span className="text-white">{purchaseDetail.branch || "Branch 1"}</span>
                       </div>
                       <div className="text-xs text-slate-500 font-mono">
                         GSTIN: {purchaseDetail.supplier?.gst_number || "N/A"}

@@ -27,6 +27,7 @@ const purchaseSchema = z.object({
   supplier_id: z.coerce.number().min(1, "Supplier is required"),
   invoice_number: z.string().optional(),
   purchase_date: z.string().min(1, "Purchase date is required"),
+  branch: z.string().default("Branch 1"),
   notes: z.string().optional(),
   items: z.array(purchaseItemSchema).min(1, "Add at least one item"),
 });
@@ -45,9 +46,10 @@ export default function AddPurchase() {
   }, []);
 
   const { register, control, handleSubmit, formState: { errors }, setValue, watch } = useForm<PurchaseFormValues>({
-    resolver: zodResolver(purchaseSchema),
+    resolver: zodResolver(purchaseSchema) as any,
     defaultValues: {
       purchase_date: new Date().toISOString().split('T')[0],
+      branch: "Branch 1",
       items: [{
         quantity: 1,
         purchase_price: 0,
@@ -108,7 +110,7 @@ export default function AddPurchase() {
           <CardHeader>
             <CardTitle className="text-white">Purchase Invoice Details</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-3 gap-6 text-slate-200">
+          <CardContent className="grid grid-cols-4 gap-6 text-slate-200">
             <div className="space-y-2">
               <Label htmlFor="supplier_id">Supplier *</Label>
               <Select onValueChange={(val) => setValue("supplier_id", parseInt(val))}>
@@ -135,7 +137,20 @@ export default function AddPurchase() {
               {errors.purchase_date && <p className="text-sm text-red-500">{errors.purchase_date.message}</p>}
             </div>
 
-            <div className="col-span-3 space-y-2">
+            <div className="space-y-2">
+              <Label htmlFor="branch">Inward Branch *</Label>
+              <Select defaultValue="Branch 1" onValueChange={(val) => setValue("branch", val)}>
+                <SelectTrigger className="bg-slate-950 border-slate-700 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-900 border-slate-700 text-white">
+                  <SelectItem value="Branch 1">Branch 1 (Chandan Vihar)</SelectItem>
+                  <SelectItem value="Branch 2">Branch 2 (Shivpuri)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="col-span-4 space-y-2">
               <Label htmlFor="notes">Notes</Label>
               <Textarea id="notes" {...register("notes")} rows={2} placeholder="Optional notes..." className="bg-slate-950/50 border-slate-800" />
             </div>

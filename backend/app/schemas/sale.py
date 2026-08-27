@@ -31,7 +31,7 @@ class SaleBase(BaseModel):
     discount_amount: float = Field(default=0.0, ge=0)
     grand_total: float = Field(default=0.0, ge=0)
     payment_method: str = "Cash"
-    branch: Optional[str] = "C-Scheme"
+    branch: Optional[str] = "Branch 1"
 
 class SaleCreate(SaleBase):
     items: List[SaleItemCreate]

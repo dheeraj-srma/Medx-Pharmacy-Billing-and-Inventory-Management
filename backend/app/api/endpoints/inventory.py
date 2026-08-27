@@ -24,22 +24,24 @@ class ActiveBatchResponse(BaseModel):
     image_url: Optional[str] = None
     batch_number: str
     expiry_date: date
-    quantity_available: int
+    quantity_available: float
     mrp: float
     selling_price: float
+    branch: Optional[str] = None
 
     class Config:
         from_attributes = True
 
 @router.get("/active-batches", response_model=List[ActiveBatchResponse])
 def get_active_batches(
+    branch: Optional[str] = None,
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
     # Fetch all active batches that have quantity > 0 and are not expired
     # Join with product to get product details for POS search & billing
     today = date.today()
-    results = db.query(
+    query = db.query(
         InventoryBatch.id,
         InventoryBatch.product_id,
         Product.name.label("product_name"),
@@ -53,14 +55,18 @@ def get_active_batches(
         InventoryBatch.expiry_date,
         InventoryBatch.quantity_available,
         InventoryBatch.mrp,
-        InventoryBatch.selling_price
+        InventoryBatch.selling_price,
+        InventoryBatch.branch
     ).join(Product, Product.id == InventoryBatch.product_id)\
      .filter(Product.is_active == True)\
      .filter(Product.is_archived == False)\
      .filter(InventoryBatch.quantity_available > 0)\
-     .filter(InventoryBatch.expiry_date >= today)\
-     .order_by(Product.name.asc(), InventoryBatch.expiry_date.asc())\
-     .all()
+     .filter(InventoryBatch.expiry_date >= today)
+
+    if branch:
+        query = query.filter(InventoryBatch.branch == branch)
+
+    results = query.order_by(Product.name.asc(), InventoryBatch.expiry_date.asc()).all()
     
     batches = []
     for row in results:
@@ -78,7 +84,8 @@ def get_active_batches(
             "expiry_date": row.expiry_date,
             "quantity_available": row.quantity_available,
             "mrp": row.mrp,
-            "selling_price": row.selling_price
+            "selling_price": row.selling_price,
+            "branch": row.branch
         })
     return batches
 

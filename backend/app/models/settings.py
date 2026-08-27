@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean
 from datetime import datetime, timezone
 from app.database.database import Base
 
@@ -12,4 +12,5 @@ class StoreSettings(Base):
     address = Column(String, nullable=True)
     gstin = Column(String, nullable=True)
     default_tax_rate = Column(Float, default=12.0)
+    print_gstin = Column(Boolean, default=True)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

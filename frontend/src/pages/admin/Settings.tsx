@@ -36,6 +36,7 @@ export default function Settings() {
     address: "",
     gstin: "",
     defaultTaxRate: "12",
+    printGstin: true,
   });
 
   // Users & Roles state
@@ -72,6 +73,7 @@ export default function Settings() {
         address: res.data.address || "",
         gstin: res.data.gstin || "",
         defaultTaxRate: res.data.default_tax_rate?.toString() || "12",
+        printGstin: res.data.print_gstin ?? true,
       });
     } catch (error) {
       console.error("Failed to fetch settings", error);
@@ -123,6 +125,7 @@ export default function Settings() {
         address: storeConfig.address || null,
         gstin: storeConfig.gstin || null,
         default_tax_rate: parseFloat(storeConfig.defaultTaxRate) || 0.0,
+        print_gstin: storeConfig.printGstin,
       };
 
       const res = await api.put("/settings/", payload);
@@ -133,6 +136,7 @@ export default function Settings() {
         address: res.data.address || "",
         gstin: res.data.gstin || "",
         defaultTaxRate: res.data.default_tax_rate?.toString() || "12",
+        printGstin: res.data.print_gstin ?? true,
       });
       alert("Settings saved successfully!");
     } catch (error) {
@@ -386,11 +390,27 @@ export default function Settings() {
                   Global parameters used across the checkout and pos workflow.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
                 <div className="space-y-2 max-w-xs">
                   <Label htmlFor="defaultTaxRate" className="text-slate-300">Default Tax Rate (%)</Label>
                   <Input id="defaultTaxRate" name="defaultTaxRate" type="number" value={storeConfig.defaultTaxRate} onChange={handleChange} className="bg-slate-950 border-slate-800 text-white" />
                   <p className="text-xs text-slate-500">Used as a fallback when product tax is not specified.</p>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-slate-950/20 rounded-lg border border-slate-800 max-w-xl">
+                  <div className="space-y-0.5">
+                    <Label className="text-slate-200">Print GSTIN on Bill</Label>
+                    <p className="text-xs text-slate-500">Toggle whether to show branch GSTIN numbers on printed bills.</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={storeConfig.printGstin} 
+                      onChange={(e) => setStoreConfig({ ...storeConfig, printGstin: e.target.checked })}
+                      className="sr-only peer" 
+                    />
+                    <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:height-5 after:width-5 after:transition-all peer-checked:bg-indigo-600 after:h-5 after:w-5"></div>
+                  </label>
                 </div>
               </CardContent>
             </Card>

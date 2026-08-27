@@ -26,6 +26,7 @@ class InventoryBatch(Base):
     mrp = Column(Float, default=0.0)
     selling_price = Column(Float, default=0.0)
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
+    branch = Column(String, default="Branch 1", nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -43,6 +44,7 @@ class InventoryTransaction(Base):
     reference_id = Column(String, nullable=True) # e.g. Purchase ID, Sale ID
     notes = Column(String, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    branch = Column(String, default="Branch 1", nullable=True)
     timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     product = relationship("Product")

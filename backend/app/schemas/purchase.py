@@ -35,7 +35,7 @@ class PurchaseBase(BaseModel):
     discount_amount: float = Field(default=0.0, ge=0)
     grand_total: float = Field(default=0.0, ge=0)
     notes: Optional[str] = None
-    branch: Optional[str] = "C-Scheme"
+    branch: Optional[str] = "Branch 1"
 
 class PurchaseCreate(PurchaseBase):
     items: List[PurchaseItemCreate]

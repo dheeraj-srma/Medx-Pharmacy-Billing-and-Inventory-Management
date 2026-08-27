@@ -20,7 +20,7 @@ class Purchase(Base):
     grand_total = Column(Float, default=0.0)
     
     notes = Column(Text, nullable=True)
-    branch = Column(String, default="C-Scheme")
+    branch = Column(String, default="Branch 1")
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
