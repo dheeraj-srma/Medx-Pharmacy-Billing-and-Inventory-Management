@@ -35,11 +35,14 @@ export default function PurchasesList() {
   useEffect(() => {
     if (selectedPurchaseId) {
       setIsLoadingDetail(true);
-      api.get(`/purchases/${selectedPurchaseId}`)
-        .then(res => setPurchaseDetail(res.data))
+      api.get(`/purchases/${selectedPurchaseId}?_cb=${Date.now()}`)
+        .then(res => {
+          console.log("Loaded purchase details:", res.data);
+          setPurchaseDetail(res.data);
+        })
         .catch(err => {
           console.error("Failed to load purchase details", err);
-          alert("Failed to load inward stock details.");
+          alert(`Failed to load inward stock details: ${err.response?.data?.detail || err.message}`);
           setSelectedPurchaseId(null);
         })
         .finally(() => setIsLoadingDetail(false));

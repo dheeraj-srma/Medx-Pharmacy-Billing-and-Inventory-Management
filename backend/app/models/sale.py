@@ -35,7 +35,7 @@ class SaleItem(Base):
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     batch_id = Column(Integer, ForeignKey("inventory_batches.id"), nullable=False)
     
-    quantity = Column(Integer, nullable=False)
+    quantity = Column(Float, nullable=False)
     unit_price = Column(Float, nullable=False) # Selling price from batch
     discount = Column(Float, default=0.0)
     total_price = Column(Float, nullable=False)

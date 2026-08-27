@@ -47,20 +47,19 @@ export default function CustomersList() {
               <TableHead className="text-slate-400">Customer Name</TableHead>
               <TableHead className="text-slate-400">Phone</TableHead>
               <TableHead className="text-slate-400">Email</TableHead>
-              <TableHead className="text-slate-400">Doctor</TableHead>
               <TableHead className="text-slate-400">Added On</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-10 text-slate-500">
+                <TableCell colSpan={4} className="text-center py-10 text-slate-500">
                   Loading customers...
                 </TableCell>
               </TableRow>
             ) : filteredCustomers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-10 text-slate-500">
+                <TableCell colSpan={4} className="text-center py-10 text-slate-500">
                   No customers found.
                 </TableCell>
               </TableRow>
@@ -70,7 +69,6 @@ export default function CustomersList() {
                   <TableCell className="font-medium text-slate-200">{customer.name}</TableCell>
                   <TableCell className="text-slate-300">{customer.phone || "N/A"}</TableCell>
                   <TableCell className="text-slate-300">{customer.email || "N/A"}</TableCell>
-                  <TableCell className="text-slate-300">{customer.doctor_name || "N/A"}</TableCell>
                   <TableCell className="text-slate-500">
                     {new Date(customer.created_at).toLocaleDateString()}
                   </TableCell>

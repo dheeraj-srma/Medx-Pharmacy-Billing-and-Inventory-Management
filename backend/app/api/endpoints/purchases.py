@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 from datetime import datetime, timezone
 from app.api import deps
@@ -113,7 +113,15 @@ def get_purchase(
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
-    purchase = db.query(Purchase).filter(Purchase.id == purchase_id).first()
+    purchase = (
+        db.query(Purchase)
+        .options(
+            joinedload(Purchase.supplier),
+            joinedload(Purchase.items).joinedload(PurchaseItem.product),
+        )
+        .filter(Purchase.id == purchase_id)
+        .first()
+    )
     if not purchase:
         raise HTTPException(status_code=404, detail="Purchase not found")
     return purchase

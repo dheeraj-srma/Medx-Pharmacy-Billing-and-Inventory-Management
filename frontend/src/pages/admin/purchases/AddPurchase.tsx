@@ -97,18 +97,18 @@ export default function AddPurchase() {
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
       <div className="flex items-center gap-4">
-        <Link to="/admin/purchases" className="text-slate-500 hover:text-slate-900">
+        <Link to="/admin/purchases" className="text-slate-400 hover:text-white transition-colors">
           <ArrowLeft size={24} />
         </Link>
-        <h1 className="text-2xl font-bold tracking-tight">Inward Stock (Purchase Entry)</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-white">Inward Stock (Purchase Entry)</h1>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <Card>
+        <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10">
           <CardHeader>
-            <CardTitle>Purchase Invoice Details</CardTitle>
+            <CardTitle className="text-white">Purchase Invoice Details</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-3 gap-6">
+          <CardContent className="grid grid-cols-3 gap-6 text-slate-200">
             <div className="space-y-2">
               <Label htmlFor="supplier_id">Supplier *</Label>
               <Select onValueChange={(val) => setValue("supplier_id", parseInt(val))}>
@@ -137,28 +137,28 @@ export default function AddPurchase() {
 
             <div className="col-span-3 space-y-2">
               <Label htmlFor="notes">Notes</Label>
-              <Textarea id="notes" {...register("notes")} rows={2} placeholder="Optional notes..." />
+              <Textarea id="notes" {...register("notes")} rows={2} placeholder="Optional notes..." className="bg-slate-950/50 border-slate-800" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Purchase Items</CardTitle>
-            <Button type="button" variant="outline" size="sm" onClick={() => append({
+        <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-slate-800/60 pb-4">
+            <CardTitle className="text-white">Purchase Items</CardTitle>
+            <Button type="button" variant="outline" size="sm" className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white" onClick={() => append({
               product_id: 0, batch_number: "", expiry_date: "", quantity: 1, purchase_price: 0, mrp: 0, selling_price: 0
             })}>
               <Plus size={16} className="mr-1" /> Add Product
             </Button>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-6 pt-6 text-slate-200">
             {fields.map((field, index) => (
-              <div key={field.id} className="p-4 border rounded-md bg-slate-50 space-y-4 relative">
+              <div key={field.id} className="p-5 border border-slate-800 rounded-xl bg-slate-950/40 space-y-4 relative">
                 <Button 
                   type="button" 
                   variant="ghost" 
                   size="icon" 
-                  className="absolute top-2 right-2 text-red-500 hover:text-red-700 hover:bg-red-50"
+                  className="absolute top-2 right-2 text-red-400 hover:text-red-300 hover:bg-red-500/10"
                   onClick={() => remove(index)}
                   disabled={fields.length === 1}
                 >
@@ -183,54 +183,54 @@ export default function AddPurchase() {
 
                   <div className="space-y-2">
                     <Label>Batch Number *</Label>
-                    <Input {...register(`items.${index}.batch_number`)} placeholder="Batch #" />
+                    <Input {...register(`items.${index}.batch_number`)} placeholder="Batch #" className="bg-slate-950/50 border-slate-800" />
                     {errors.items?.[index]?.batch_number && <p className="text-sm text-red-500">{errors.items[index]?.batch_number?.message}</p>}
                   </div>
 
                   <div className="space-y-2">
                     <Label>Expiry Date *</Label>
-                    <Input type="date" {...register(`items.${index}.expiry_date`)} />
+                    <Input type="date" {...register(`items.${index}.expiry_date`)} className="bg-slate-950/50 border-slate-800" />
                     {errors.items?.[index]?.expiry_date && <p className="text-sm text-red-500">{errors.items[index]?.expiry_date?.message}</p>}
                   </div>
 
                   <div className="space-y-2">
                     <Label>Quantity *</Label>
-                    <Input type="number" {...register(`items.${index}.quantity`)} />
+                    <Input type="number" {...register(`items.${index}.quantity`)} className="bg-slate-950/50 border-slate-800" />
                     {errors.items?.[index]?.quantity && <p className="text-sm text-red-500">{errors.items[index]?.quantity?.message}</p>}
                   </div>
 
                   <div className="space-y-2">
                     <Label>Purchase Price (₹) *</Label>
-                    <Input type="number" step="0.01" {...register(`items.${index}.purchase_price`)} />
+                    <Input type="number" step="0.01" {...register(`items.${index}.purchase_price`)} className="bg-slate-950/50 border-slate-800" />
                   </div>
 
                   <div className="space-y-2">
                     <Label>MRP (₹) *</Label>
-                    <Input type="number" step="0.01" {...register(`items.${index}.mrp`)} />
+                    <Input type="number" step="0.01" {...register(`items.${index}.mrp`)} className="bg-slate-950/50 border-slate-800" />
                   </div>
 
                   <div className="space-y-2">
                     <Label>Selling Price (₹) *</Label>
-                    <Input type="number" step="0.01" {...register(`items.${index}.selling_price`)} />
+                    <Input type="number" step="0.01" {...register(`items.${index}.selling_price`)} className="bg-slate-950/50 border-slate-800" />
                   </div>
                 </div>
               </div>
             ))}
 
-            <div className="flex justify-end pt-4 border-t">
+            <div className="flex justify-end pt-4 border-t border-slate-800">
               <div className="text-right">
-                <p className="text-sm text-slate-500 mb-1">Grand Total</p>
-                <p className="text-3xl font-bold text-slate-900">₹{grandTotal.toFixed(2)}</p>
+                <p className="text-sm text-slate-400 mb-1">Grand Total</p>
+                <p className="text-3xl font-bold text-emerald-400 font-mono">₹{grandTotal.toFixed(2)}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
         <div className="flex justify-end gap-4">
-          <Button type="button" variant="outline" onClick={() => navigate("/admin/purchases")}>
+          <Button type="button" variant="outline" onClick={() => navigate("/admin/purchases")} className="border-slate-800 hover:bg-slate-900 text-slate-300">
             Cancel
           </Button>
-          <Button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700">
+          <Button type="submit" disabled={isSubmitting} className="bg-indigo-600 hover:bg-indigo-700 text-white">
             {isSubmitting ? "Processing..." : <><Save className="mr-2" size={18} /> Complete Purchase & Update Stock</>}
           </Button>
         </div>

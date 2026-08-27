@@ -9,7 +9,7 @@ class PurchaseItemBase(BaseModel):
     batch_number: str
     manufacturing_date: Optional[date] = None
     expiry_date: date
-    quantity: int = Field(..., gt=0)
+    quantity: float = Field(..., gt=0)
     purchase_price: float = Field(..., ge=0)
     mrp: float = Field(..., ge=0)
     selling_price: float = Field(..., ge=0)

@@ -6,7 +6,7 @@ from app.schemas.customer import Customer
 class SaleItemBase(BaseModel):
     product_id: int
     batch_id: int
-    quantity: int = Field(..., gt=0)
+    quantity: float = Field(..., gt=0)
     unit_price: float = Field(..., ge=0)
     discount: float = Field(default=0.0, ge=0)
     total_price: float = Field(..., ge=0)

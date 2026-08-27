@@ -12,9 +12,16 @@ import {
   BarChart, 
   Settings,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Truck,
+  Warehouse,
+  Receipt,
+  UserCheck,
+  Sun,
+  Moon
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 
 export default function AdminLayout() {
   const { user } = useAuthStore();
@@ -22,6 +29,18 @@ export default function AdminLayout() {
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "dark");
+
+  useEffect(() => {
+    if (theme === "light") {
+      document.body.classList.add("light");
+      document.body.classList.remove("dark");
+    } else {
+      document.body.classList.add("dark");
+      document.body.classList.remove("light");
+    }
+    localStorage.setItem("theme", theme);
+  }, [theme]);
 
   // Eager prefetch: warm the cache for all major modules on layout mount.
   // fetch* calls are no-ops if data is already fresh (< 60s old).
@@ -54,10 +73,10 @@ export default function AdminLayout() {
     { name: "Dashboard", path: "/admin", icon: LayoutDashboard },
     { name: "Products", path: "/admin/products", icon: Package },
     { name: "Suppliers", path: "/admin/suppliers", icon: Users },
-    { name: "Purchases", path: "/admin/purchases", icon: ShoppingCart },
-    { name: "Inventory", path: "/admin/inventory", icon: Package },
-    { name: "Sales History", path: "/admin/sales", icon: ShoppingCart },
-    { name: "Customers", path: "/admin/customers", icon: Users },
+    { name: "Purchases", path: "/admin/purchases", icon: Truck },
+    { name: "Inventory", path: "/admin/inventory", icon: Warehouse },
+    { name: "Sales History", path: "/admin/sales", icon: Receipt },
+    { name: "Customers", path: "/admin/customers", icon: UserCheck },
     { name: "Reports", path: "/admin/reports", icon: BarChart },
     { name: "Settings", path: "/admin/settings", icon: Settings },
   ];
@@ -149,6 +168,16 @@ export default function AdminLayout() {
               </span>
               <span className="text-xs font-semibold text-emerald-400 tracking-wide select-none">Syncing...</span>
             </div>
+
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+              className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 h-8 w-8 rounded-lg flex items-center justify-center transition-colors"
+              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+            >
+              {theme === 'dark' ? <Sun size={16} className="text-amber-400 animate-pulse" /> : <Moon size={16} className="text-indigo-400" />}
+            </Button>
 
             <div className="text-sm font-medium text-slate-400 border-l border-slate-800 pl-4 h-5 flex items-center">
               {user?.full_name || user?.email || "Admin"}

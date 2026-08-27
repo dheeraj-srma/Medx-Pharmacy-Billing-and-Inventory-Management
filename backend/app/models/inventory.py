@@ -21,7 +21,7 @@ class InventoryBatch(Base):
     batch_number = Column(String, index=True, nullable=True) # Optional for initial stock if unknown
     manufacturing_date = Column(Date, nullable=True)
     expiry_date = Column(Date, nullable=False)
-    quantity_available = Column(Integer, default=0, nullable=False)
+    quantity_available = Column(Float, default=0.0, nullable=False)
     purchase_price = Column(Float, default=0.0)
     mrp = Column(Float, default=0.0)
     selling_price = Column(Float, default=0.0)
@@ -37,7 +37,7 @@ class InventoryTransaction(Base):
     id = Column(Integer, primary_key=True, index=True)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     batch_id = Column(Integer, ForeignKey("inventory_batches.id"), nullable=False)
-    quantity_change = Column(Integer, nullable=False)
+    quantity_change = Column(Float, nullable=False)
     transaction_type = Column(Enum(TransactionTypeEnum), nullable=False)
     reference_type = Column(String, nullable=True) # e.g. "Invoice", "PurchaseOrder", "InitialStock"
     reference_id = Column(String, nullable=True) # e.g. Purchase ID, Sale ID

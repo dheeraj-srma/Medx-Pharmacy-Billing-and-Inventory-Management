@@ -8,7 +8,7 @@ class InventoryBatchBase(BaseModel):
     batch_number: Optional[str] = None
     manufacturing_date: Optional[date] = None
     expiry_date: date
-    quantity_available: int
+    quantity_available: float
     purchase_price: float = 0.0
     mrp: float = 0.0
     selling_price: float = 0.0
@@ -27,7 +27,7 @@ class InventoryBatchResponse(InventoryBatchBase):
 class InventoryTransactionBase(BaseModel):
     product_id: int
     batch_id: int
-    quantity_change: int
+    quantity_change: float
     transaction_type: TransactionTypeEnum
     reference_type: Optional[str] = None
     reference_id: Optional[str] = None
@@ -45,7 +45,7 @@ class InventoryTransactionResponse(InventoryTransactionBase):
 
 class StockAdjustmentRequest(BaseModel):
     batch_id: int
-    quantity_change: int
+    quantity_change: float
     transaction_type: TransactionTypeEnum = TransactionTypeEnum.ADJUSTMENT
     notes: Optional[str] = None
 

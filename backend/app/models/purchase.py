@@ -2,6 +2,9 @@ from sqlalchemy import Column, Integer, String, Float, Text, Date, DateTime, For
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.database.database import Base
+from app.models.supplier import Supplier
+from app.models.user import User
+from app.models.product import Product
 
 class Purchase(Base):
     __tablename__ = "purchases"
@@ -36,7 +39,7 @@ class PurchaseItem(Base):
     manufacturing_date = Column(Date, nullable=True)
     expiry_date = Column(Date, nullable=False)
     
-    quantity = Column(Integer, nullable=False)
+    quantity = Column(Float, nullable=False)
     purchase_price = Column(Float, nullable=False)
     mrp = Column(Float, nullable=False)
     selling_price = Column(Float, nullable=False)

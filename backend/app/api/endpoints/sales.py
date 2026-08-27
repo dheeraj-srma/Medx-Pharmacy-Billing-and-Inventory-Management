@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
-from datetime import datetime, timezone
+from sqlalchemy import func
+from typing import List, Optional
+from datetime import datetime, timezone, date
 import uuid
 from app.api import deps
 from app.models.sale import Sale, SaleItem
@@ -12,10 +13,17 @@ router = APIRouter()
 
 @router.get("/", response_model=List[SaleSchema])
 def get_sales(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
-    sales = db.query(Sale).order_by(Sale.created_at.desc()).all()
+    query = db.query(Sale)
+    if start_date:
+        query = query.filter(func.date(Sale.sale_date) >= start_date)
+    if end_date:
+        query = query.filter(func.date(Sale.sale_date) <= end_date)
+    sales = query.order_by(Sale.created_at.desc()).all()
     return sales
 
 @router.post("/", response_model=SaleSchema)
