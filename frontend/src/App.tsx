@@ -30,6 +30,22 @@ function App() {
     }
   }, [token, fetchUser]);
 
+  useEffect(() => {
+    const handleWheel = () => {
+      if (
+        document.activeElement && 
+        document.activeElement.tagName === "INPUT" && 
+        (document.activeElement as HTMLInputElement).type === "number"
+      ) {
+        (document.activeElement as HTMLInputElement).blur();
+      }
+    };
+    window.addEventListener("wheel", handleWheel, { passive: true });
+    return () => {
+      window.removeEventListener("wheel", handleWheel);
+    };
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>

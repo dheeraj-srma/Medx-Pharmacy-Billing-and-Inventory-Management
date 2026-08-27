@@ -144,3 +144,5 @@ body.dashboard-modal-open main > div:first-child {
 aside, header, main > div:first-child {
   transition: filter 0.25s ease-in-out;
 }
+
+
