@@ -17,6 +17,7 @@ class StoreSettingsUpdate(StoreSettingsBase):
 
 class StoreSettingsResponse(StoreSettingsBase):
     id: int
+    branch_id: int
     updated_at: datetime
 
     class Config:

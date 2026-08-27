@@ -20,13 +20,14 @@ class Purchase(Base):
     grand_total = Column(Float, default=0.0)
     
     notes = Column(Text, nullable=True)
-    branch = Column(String, default="Branch 1")
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     supplier = relationship("Supplier")
     items = relationship("PurchaseItem", back_populates="purchase")
     user = relationship("User")
+    branch = relationship("Branch", back_populates="purchases")
 
 class PurchaseItem(Base):
     __tablename__ = "purchase_items"

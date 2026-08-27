@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import api from '../services/api';
+import api, { cacheStore } from '../services/api';
 
 interface User {
   id: number;
   email: string;
   full_name: string | null;
-  role: 'admin' | 'staff';
+  role: 'admin' | 'staff' | 'superadmin';
+  branch_id: number | null;
 }
 
 interface AuthState {
@@ -24,11 +25,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   
   login: (token: string) => {
     localStorage.setItem('token', token);
+    cacheStore.invalidate('');
     set({ token, isAuthenticated: true });
   },
   
   logout: () => {
     localStorage.removeItem('token');
+    cacheStore.invalidate('');
     set({ token: null, user: null, isAuthenticated: false });
   },
 
@@ -38,6 +41,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ user: response.data, isAuthenticated: true });
     } catch (error) {
       localStorage.removeItem('token');
+      cacheStore.invalidate('');
       set({ token: null, user: null, isAuthenticated: false });
     }
   }

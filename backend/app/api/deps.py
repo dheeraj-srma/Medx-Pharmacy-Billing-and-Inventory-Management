@@ -15,11 +15,27 @@ reusable_oauth2 = OAuth2PasswordBearer(
 )
 
 def get_current_user(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    token: str = Depends(reusable_oauth2)
 ) -> User:
-    user = db.query(User).first()
+    try:
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
+        email: str = payload.get("sub")
+        if email is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+            )
+    except (JWTError, ValidationError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+        )
+    user = db.query(User).filter(User.email == email).first()
     if not user:
-        user = User(id=1, email="admin@medex.com", is_active=True, role=RoleEnum.ADMIN)
+        raise HTTPException(status_code=404, detail="User not found")
     return user
 
 def get_current_active_user(

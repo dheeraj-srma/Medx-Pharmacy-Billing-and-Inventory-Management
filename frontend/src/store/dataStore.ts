@@ -14,6 +14,7 @@
 
 import { create } from 'zustand';
 import api, { cacheStore } from '../services/api';
+import { useAuthStore } from './authStore';
 
 const STALE_AFTER_MS = 60 * 1000; // 60 seconds — matches api.ts FRESH_TTL
 
@@ -79,6 +80,9 @@ interface DataStoreState {
   fetchPurchaseReport: (startDate: string, endDate: string, force?: boolean) => Promise<void>;
   fetchInventoryReport: (force?: boolean) => Promise<void>;
 
+  selectedBranchId: number | undefined;
+  setSelectedBranchId: (id: number | undefined) => void;
+
   /** Invalidate a slice so the next fetch forces a full reload */
   invalidate: (sliceKey: keyof Pick<DataStoreState, 'products' | 'customers' | 'suppliers' | 'sales' | 'purchases' | 'dashboard' | 'batches' | 'transactions'>) => void;
   /** Invalidate ALL slices */
@@ -115,19 +119,28 @@ export const useDataStore = create<DataStoreState>((set, get) => {
 
     const isBackground = slice.loaded; // has data → background sync, not blocking load
 
+    const authUser = useAuthStore.getState().user;
+    const isSuperAdmin = authUser?.role === 'superadmin';
+    const selectedBranchId = get().selectedBranchId;
+    
+    let finalParams = params || {};
+    if (isSuperAdmin && selectedBranchId !== undefined) {
+      finalParams = { ...finalParams, branch_id: selectedBranchId };
+    }
+
     set((s) => ({
       [sliceKey]: {
-        ...s[sliceKey as keyof DataStoreState],
+        ...(s[sliceKey] as any),
         loading: !isBackground,
         syncing: isBackground,
       },
     }));
 
     try {
-      const res = await api.get(url, params ? { params } : undefined);
+      const res = await api.get(url, Object.keys(finalParams).length > 0 ? { params: finalParams } : undefined);
       set((s) => ({
         [sliceKey]: {
-          ...s[sliceKey as keyof DataStoreState],
+          ...(s[sliceKey] as any),
           data: transform(res.data),
           loaded: true,
           loading: false,
@@ -139,7 +152,7 @@ export const useDataStore = create<DataStoreState>((set, get) => {
       console.error(`[dataStore] Failed to fetch ${url}`, err);
       set((s) => ({
         [sliceKey]: {
-          ...s[sliceKey as keyof DataStoreState],
+          ...(s[sliceKey] as any),
           loading: false,
           syncing: false,
         },
@@ -157,6 +170,13 @@ export const useDataStore = create<DataStoreState>((set, get) => {
     dashboard: makeSlice<DashboardData>({ stats: null, salesChart: [], recentSales: [] }),
     batches: makeSlice<any[]>([]),
     transactions: makeSlice<any[]>([]),
+
+    selectedBranchId: undefined,
+    setSelectedBranchId: (id) => {
+      set({ selectedBranchId: id });
+      const store = get();
+      store.invalidateAll();
+    },
     reports: {
       salesReport: null,
       purchaseReport: null,
@@ -200,8 +220,16 @@ export const useDataStore = create<DataStoreState>((set, get) => {
         reports: { ...s.reports, salesLoading: !isBackground },
       }));
 
+      const authUser = useAuthStore.getState().user;
+      const isSuperAdmin = authUser?.role === 'superadmin';
+      const selectedBranchId = get().selectedBranchId;
+      const params: any = { start_date: startDate, end_date: endDate };
+      if (isSuperAdmin && selectedBranchId !== undefined) {
+        params.branch_id = selectedBranchId;
+      }
+
       try {
-        const res = await api.get('/reports/sales', { params: { start_date: startDate, end_date: endDate } });
+        const res = await api.get('/reports/sales', { params });
         set((s) => ({
           reports: {
             ...s.reports,
@@ -233,8 +261,16 @@ export const useDataStore = create<DataStoreState>((set, get) => {
         reports: { ...s.reports, purchasesLoading: !isBackground },
       }));
 
+      const authUser = useAuthStore.getState().user;
+      const isSuperAdmin = authUser?.role === 'superadmin';
+      const selectedBranchId = get().selectedBranchId;
+      const params: any = { start_date: startDate, end_date: endDate };
+      if (isSuperAdmin && selectedBranchId !== undefined) {
+        params.branch_id = selectedBranchId;
+      }
+
       try {
-        const res = await api.get('/reports/purchases', { params: { start_date: startDate, end_date: endDate } });
+        const res = await api.get('/reports/purchases', { params });
         set((s) => ({
           reports: {
             ...s.reports,
@@ -264,8 +300,16 @@ export const useDataStore = create<DataStoreState>((set, get) => {
         reports: { ...s.reports, inventoryLoading: !isBackground },
       }));
 
+      const authUser = useAuthStore.getState().user;
+      const isSuperAdmin = authUser?.role === 'superadmin';
+      const selectedBranchId = get().selectedBranchId;
+      const params: any = {};
+      if (isSuperAdmin && selectedBranchId !== undefined) {
+        params.branch_id = selectedBranchId;
+      }
+
       try {
-        const res = await api.get('/reports/inventory-valuation');
+        const res = await api.get('/reports/inventory-valuation', Object.keys(params).length > 0 ? { params } : undefined);
         set((s) => ({
           reports: {
             ...s.reports,
@@ -290,11 +334,17 @@ export const useDataStore = create<DataStoreState>((set, get) => {
         dashboard: { ...s.dashboard, loading: !isBackground, syncing: isBackground },
       }));
 
+      const authUser = useAuthStore.getState().user;
+      const isSuperAdmin = authUser?.role === 'superadmin';
+      const selectedBranchId = get().selectedBranchId;
+      const bParam = (isSuperAdmin && selectedBranchId !== undefined) ? `?branch_id=${selectedBranchId}` : '';
+      const bParamAmp = (isSuperAdmin && selectedBranchId !== undefined) ? `&branch_id=${selectedBranchId}` : '';
+
       try {
         const [statsRes, chartRes, recentRes] = await Promise.all([
-          api.get('/analytics/dashboard-stats'),
-          api.get('/analytics/sales-chart?days=7'),
-          api.get('/analytics/recent-sales?limit=5'),
+          api.get(`/analytics/dashboard-stats${bParam}`),
+          api.get(`/analytics/sales-chart?days=7${bParamAmp}`),
+          api.get(`/analytics/recent-sales?limit=5${bParamAmp}`),
         ]);
 
         const formattedChart = chartRes.data.map((d: any) => ({

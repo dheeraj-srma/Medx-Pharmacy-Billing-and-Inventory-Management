@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import date, datetime, timedelta, timezone
 from app.api import deps
 from app.models.sale import Sale, SaleItem
 from app.models.purchase import Purchase, PurchaseItem
 from app.models.inventory import InventoryBatch
 from app.models.product import Product
+from app.models.user import RoleEnum
 
 router = APIRouter()
 
@@ -15,6 +16,7 @@ router = APIRouter()
 def get_sales_report(
     start_date: date,
     end_date: date,
+    branch_id: Optional[int] = None,
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
@@ -25,6 +27,12 @@ def get_sales_report(
             func.date(Sale.sale_date) <= end_date
         )
         
+        if current_user.role == RoleEnum.SUPERADMIN:
+            if branch_id:
+                sales_query = sales_query.filter(Sale.branch_id == branch_id)
+        else:
+            sales_query = sales_query.filter(Sale.branch_id == current_user.branch_id)
+            
         sales_list = sales_query.all()
         
         total_revenue = sum(s.grand_total for s in sales_list)
@@ -42,7 +50,6 @@ def get_sales_report(
                 payment_methods[method] = s.grand_total
                 
         # 3. Daily Summary
-        # SQLite: use Python date grouping since date strings are stored differently
         daily_summary = {}
         curr = start_date
         while curr <= end_date:
@@ -57,7 +64,6 @@ def get_sales_report(
             curr += timedelta(days=1)
             
         for s in sales_list:
-            # handle datetime/date mapping
             s_date_str = s.sale_date.date().isoformat() if isinstance(s.sale_date, datetime) else s.sale_date.isoformat()
             if s_date_str in daily_summary:
                 daily_summary[s_date_str]["invoice_count"] += 1
@@ -83,6 +89,7 @@ def get_sales_report(
 def get_purchases_report(
     start_date: date,
     end_date: date,
+    branch_id: Optional[int] = None,
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
@@ -93,6 +100,12 @@ def get_purchases_report(
             Purchase.purchase_date <= end_date
         )
         
+        if current_user.role == RoleEnum.SUPERADMIN:
+            if branch_id:
+                purchases_query = purchases_query.filter(Purchase.branch_id == branch_id)
+        else:
+            purchases_query = purchases_query.filter(Purchase.branch_id == current_user.branch_id)
+            
         purchases_list = purchases_query.all()
         
         total_expense = sum(p.grand_total for p in purchases_list)
@@ -129,18 +142,26 @@ def get_purchases_report(
 
 @router.get("/inventory-valuation")
 def get_inventory_valuation(
+    branch_id: Optional[int] = None,
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
     try:
         # Fetch all batches that have quantity > 0
-        batches = db.query(
+        query = db.query(
             InventoryBatch,
             Product.name.label("product_name"),
             Product.sku.label("product_sku")
         ).join(Product, Product.id == InventoryBatch.product_id)\
-         .filter(InventoryBatch.quantity_available > 0)\
-         .all()
+         .filter(InventoryBatch.quantity_available > 0)
+         
+        if current_user.role == RoleEnum.SUPERADMIN:
+            if branch_id:
+                query = query.filter(InventoryBatch.branch_id == branch_id)
+        else:
+            query = query.filter(InventoryBatch.branch_id == current_user.branch_id)
+            
+        batches = query.all()
          
         total_products = db.query(func.count(Product.id)).filter(Product.is_active == True).scalar() or 0
         total_batches = len(batches)

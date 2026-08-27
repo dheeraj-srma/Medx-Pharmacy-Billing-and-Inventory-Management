@@ -18,14 +18,24 @@ import {
   Receipt,
   UserCheck,
   Sun,
-  Moon
+  Moon,
+  LogOut
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 
 export default function AdminLayout() {
-  const { user } = useAuthStore();
-  const { fetchProducts, fetchCustomers, fetchSuppliers, fetchSales, fetchPurchases, fetchDashboard } = useDataStore();
+  const { user, logout } = useAuthStore();
+  const { 
+    fetchProducts, 
+    fetchCustomers, 
+    fetchSuppliers, 
+    fetchSales, 
+    fetchPurchases, 
+    fetchDashboard,
+    selectedBranchId,
+    setSelectedBranchId
+  } = useDataStore();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -44,17 +54,35 @@ export default function AdminLayout() {
 
   // Eager prefetch: warm the cache for all major modules on layout mount.
   // fetch* calls are no-ops if data is already fresh (< 60s old).
+  // Products endpoint is public (no auth required), so always prefetch it.
+  // All other endpoints require auth — only prefetch when user is available.
   useEffect(() => {
-    fetchDashboard();
     fetchProducts();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    fetchDashboard();
     fetchCustomers();
     fetchSuppliers();
     fetchSales();
     fetchPurchases();
-
-  // Run once on mount only
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
+
+  // Refetch when branch filter changes for superadmin
+  useEffect(() => {
+    if (user?.role === "superadmin") {
+      fetchDashboard(true);
+      fetchProducts(true);
+      fetchCustomers(true);
+      fetchSuppliers(true);
+      fetchSales(true);
+      fetchPurchases(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBranchId, user?.role]);
 
   useEffect(() => {
     const handleNetworkStatus = (e: Event) => {
@@ -90,11 +118,13 @@ export default function AdminLayout() {
         <div className="h-16 flex items-center justify-between px-4 border-b border-slate-800 shrink-0">
           {!isCollapsed && (
             <h2 className="text-xl font-bold flex items-center gap-2 text-white">
-              <span className="text-indigo-500 text-2xl leading-none -mt-1">+</span> MedEx
+              <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" /> MedEx
             </h2>
           )}
           {isCollapsed && (
-            <div className="mx-auto text-indigo-500 font-bold text-2xl">+</div>
+            <div className="mx-auto flex items-center justify-center">
+              <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
+            </div>
           )}
           <button 
             onClick={() => setIsCollapsed(!isCollapsed)}
@@ -169,6 +199,21 @@ export default function AdminLayout() {
               <span className="text-xs font-semibold text-emerald-400 tracking-wide select-none">Syncing...</span>
             </div>
 
+            {user?.role === "superadmin" && (
+              <select
+                value={selectedBranchId ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedBranchId(val ? Number(val) : undefined);
+                }}
+                className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              >
+                <option value="">All Branches</option>
+                <option value="1">Branch 1 (Chandan Vihar)</option>
+                <option value="2">Branch 2 (Shivpuri)</option>
+              </select>
+            )}
+
             <Button 
               variant="ghost" 
               size="icon" 
@@ -177,6 +222,16 @@ export default function AdminLayout() {
               title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
             >
               {theme === 'dark' ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} className="text-indigo-400" />}
+            </Button>
+
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={logout}
+              className="text-slate-400 hover:text-red-400 hover:bg-slate-800/80 h-8 w-8 rounded-lg flex items-center justify-center transition-colors"
+              title="Log Out"
+            >
+              <LogOut size={16} />
             </Button>
 
             <div className="text-sm font-medium text-slate-400 border-l border-slate-800 pl-4 h-5 flex items-center">

@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func
 from typing import List, Optional
 from datetime import datetime, timezone, date
@@ -7,6 +7,7 @@ import uuid
 from app.api import deps
 from app.models.sale import Sale, SaleItem
 from app.models.inventory import InventoryBatch, InventoryTransaction, TransactionTypeEnum
+from app.models.user import RoleEnum
 from app.schemas.sale import Sale as SaleSchema, SaleCreate
 
 router = APIRouter()
@@ -15,14 +16,25 @@ router = APIRouter()
 def get_sales(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
+    branch_id: Optional[int] = None,
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
-    query = db.query(Sale)
+    query = db.query(Sale).options(
+        selectinload(Sale.customer),
+        selectinload(Sale.items),
+    )
+    if current_user.role == RoleEnum.SUPERADMIN:
+        if branch_id:
+            query = query.filter(Sale.branch_id == branch_id)
+    else:
+        query = query.filter(Sale.branch_id == current_user.branch_id)
+        
     if start_date:
         query = query.filter(func.date(Sale.sale_date) >= start_date)
     if end_date:
         query = query.filter(func.date(Sale.sale_date) <= end_date)
+        
     sales = query.order_by(Sale.created_at.desc()).all()
     return sales
 
@@ -32,16 +44,22 @@ def create_sale(
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
+    if current_user.role == RoleEnum.SUPERADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Superadmin has read-only access and cannot create sales."
+        )
+        
     try:
-        # Generate Invoice Number if not provided
         invoice_number = sale.invoice_number
         if not invoice_number:
-            # Simple unique invoice number generation
             now_str = datetime.now().strftime("%Y%m%d%H%M%S")
             short_uuid = str(uuid.uuid4())[:4].upper()
             invoice_number = f"INV-{now_str}-{short_uuid}"
 
-        # Create Sale
+        # Determine sale branch_id: default to current_user.branch_id, but allow customization if provided
+        sale_branch_id = sale.branch_id if sale.branch_id else current_user.branch_id
+
         db_sale = Sale(
             invoice_number=invoice_number,
             customer_id=sale.customer_id,
@@ -51,17 +69,20 @@ def create_sale(
             grand_total=sale.grand_total,
             payment_method=sale.payment_method,
             status="COMPLETED",
-            branch=sale.branch,
+            branch_id=sale_branch_id,
             created_by=current_user.id
         )
         db.add(db_sale)
-        db.flush() # Get sale ID
+        db.flush()
         
         for item in sale.items:
-            # Find the batch
-            batch = db.query(InventoryBatch).filter(InventoryBatch.id == item.batch_id).with_for_update().first()
+            batch = db.query(InventoryBatch).filter(
+                InventoryBatch.id == item.batch_id,
+                InventoryBatch.branch_id == sale_branch_id
+            ).with_for_update().first()
+            
             if not batch:
-                raise ValueError(f"Batch ID {item.batch_id} not found.")
+                raise ValueError(f"Batch ID {item.batch_id} not found in this branch.")
             
             if batch.product_id != item.product_id:
                 raise ValueError(f"Product ID mismatch for batch {item.batch_id}.")
@@ -69,10 +90,8 @@ def create_sale(
             if batch.quantity_available < item.quantity:
                 raise ValueError(f"Insufficient stock for batch {item.batch_id}. Available: {batch.quantity_available}, Requested: {item.quantity}")
 
-            # Deduct quantity
             batch.quantity_available -= item.quantity
             
-            # Create SaleItem
             db_item = SaleItem(
                 sale_id=db_sale.id,
                 product_id=item.product_id,
@@ -84,16 +103,16 @@ def create_sale(
             )
             db.add(db_item)
             
-            # Create InventoryTransaction
             transaction = InventoryTransaction(
                 product_id=item.product_id,
                 batch_id=batch.id,
-                quantity_change=-item.quantity, # Negative for sale
+                quantity_change=-item.quantity,
                 transaction_type=TransactionTypeEnum.SALE,
                 reference_type="Sale",
                 reference_id=str(db_sale.id),
                 notes=f"Sale Invoice: {invoice_number}",
                 user_id=current_user.id,
+                branch_id=sale_branch_id,
                 timestamp=datetime.now(timezone.utc)
             )
             db.add(transaction)
@@ -115,7 +134,14 @@ def get_sale(
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
-    sale = db.query(Sale).filter(Sale.id == sale_id).first()
+    sale = db.query(Sale).options(
+        selectinload(Sale.customer),
+        selectinload(Sale.items),
+    ).filter(Sale.id == sale_id).first()
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found")
+        
+    if current_user.role != RoleEnum.SUPERADMIN and sale.branch_id != current_user.branch_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this branch's data.")
+        
     return sale

@@ -13,7 +13,7 @@ class InventoryBatchBase(BaseModel):
     mrp: float = 0.0
     selling_price: float = 0.0
     supplier_id: Optional[int] = None
-    branch: Optional[str] = "Branch 1"
+    branch_id: Optional[int] = None
 
 class InventoryBatchCreate(InventoryBatchBase):
     class Config:
@@ -33,7 +33,7 @@ class InventoryTransactionBase(BaseModel):
     reference_type: Optional[str] = None
     reference_id: Optional[str] = None
     notes: Optional[str] = None
-    branch: Optional[str] = "Branch 1"
+    branch_id: Optional[int] = None
 
 class InventoryTransactionCreate(InventoryTransactionBase):
     class Config:

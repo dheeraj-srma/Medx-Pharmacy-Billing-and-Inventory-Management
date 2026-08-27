@@ -19,6 +19,7 @@ class CustomerUpdate(CustomerBase):
 
 class Customer(CustomerBase):
     id: int
+    branch_id: Optional[int] = None
     created_at: datetime
 
     class Config:

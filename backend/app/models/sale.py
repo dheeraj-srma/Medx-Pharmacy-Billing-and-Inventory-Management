@@ -18,7 +18,7 @@ class Sale(Base):
     
     payment_method = Column(String, default="Cash") # Cash, Card, UPI
     status = Column(String, default="COMPLETED") # COMPLETED, REFUNDED
-    branch = Column(String, default="Branch 1")
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -26,6 +26,7 @@ class Sale(Base):
     customer = relationship("Customer")
     items = relationship("SaleItem", back_populates="sale")
     user = relationship("User")
+    branch = relationship("Branch", back_populates="sales")
 
 class SaleItem(Base):
     __tablename__ = "sale_items"

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import api from "../../../services/api";
+import { useAuthStore } from "../../../store/authStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -125,6 +126,8 @@ function matchAndRankBatch(batch: BatchItem, rawQuery: string): MatchResult | nu
 }
 
 export default function POS() {
+  const { user } = useAuthStore();
+  const [selectedBranchId, setSelectedBranchId] = useState<number>(user?.branch_id || 1);
   const [activeBatches, setActiveBatches] = useState<BatchItem[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [cart, setCart] = useState<any[]>([]);
@@ -143,31 +146,46 @@ export default function POS() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [completedSale, setCompletedSale] = useState<any>(null);
   const [matchedCustomerId, setMatchedCustomerId] = useState<number | null>(null);
-  const [branch, setBranch] = useState("Branch 1");
   const [storeSettings, setStoreSettings] = useState<any>(null);
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [taxPercent, setTaxPercent] = useState<number>(0);
   
   const [printSnapshot, setPrintSnapshot] = useState<any>(null);
 
+  // Sync selectedBranchId when user object finishes loading
   useEffect(() => {
-    // Fetch available batches for the selected branch
-    api.get(`/inventory/active-batches?branch=${branch}`).then(res => setActiveBatches(res.data)).catch(console.error);
-  }, [branch]);
+    if (user?.branch_id) {
+      setSelectedBranchId(user.branch_id);
+    }
+  }, [user]);
 
   useEffect(() => {
-    api.get("/settings/").then(res => setStoreSettings(res.data)).catch(console.error);
+    // Fetch available batches for the selected branch
+    api.get("/inventory/active-batches", { params: { branch_id: selectedBranchId } })
+      .then(res => setActiveBatches(res.data))
+      .catch(console.error);
+  }, [selectedBranchId]);
+
+  useEffect(() => {
+    // Fetch settings for the selected branch to print correct branch info on invoice
+    api.get("/settings/", { params: { branch_id: selectedBranchId } })
+      .then(res => setStoreSettings(res.data))
+      .catch(console.error);
+  }, [selectedBranchId]);
+
+  useEffect(() => {
     api.get("/customers/").then(res => setCustomers(res.data)).catch(console.error);
   }, []);
 
-  const handleBranchChange = (newBranch: string) => {
+  const handleBranchChange = (value: string) => {
+    const newBranchId = parseInt(value);
     if (cart.length > 0) {
       if (window.confirm("Changing the branch will clear your current cart. Do you want to proceed?")) {
         setCart([]);
-        setBranch(newBranch);
+        setSelectedBranchId(newBranchId);
       }
     } else {
-      setBranch(newBranch);
+      setSelectedBranchId(newBranchId);
     }
   };
 
@@ -510,7 +528,7 @@ export default function POS() {
         discount_amount: discountAmount,
         grand_total: grandTotal,
         payment_method: paymentMethod,
-        branch: branch,
+        branch_id: selectedBranchId,
         items: cart.map(item => ({
           product_id: item.product_id,
           batch_id: item.batch_id,
@@ -534,7 +552,6 @@ export default function POS() {
         customerName: custName,
         customerPhone: custPhone,
         invoiceNumber: res.data.invoice_number,
-        branch: branch,
         date: new Date().toLocaleString()
       });
 
@@ -547,7 +564,7 @@ export default function POS() {
       setMatchedCustomerId(null);
       
       // Refresh batches to reflect new quantities
-      api.get(`/inventory/active-batches?branch=${branch}`).then(r => setActiveBatches(r.data));
+      api.get("/inventory/active-batches").then(r => setActiveBatches(r.data));
       
     } catch (error: any) {
       console.error("Checkout failed", error);
@@ -590,19 +607,14 @@ export default function POS() {
     doc.setTextColor(67, 56, 202); // #4338CA
     doc.text("Med-X Pharmacy", textXOffset, 31);
     
-    const isBranch1 = printSnapshot.branch === "Branch 1";
-    const branchAddress = isBranch1
-      ? "Plot No. 20A, Chandan Vihar, Near Coaching Hub, Jaipur, Rajasthan"
-      : "House No. 192-A, Shivpuri, BudhiSingh Pura, Jaipur, Rajasthan";
-    const branchPhone = isBranch1
-      ? "+91 9145887170"
-      : "+91 8307407566";
-    const branchEmail = "medxpharmacy7170@gmail.com";
+    const branchAddress = storeSettings?.address || "Jaipur, Rajasthan";
+    const branchPhone = storeSettings?.phone || "";
+    const branchEmail = storeSettings?.email || "medxpharmacy7170@gmail.com";
     
     const printGstinEnabled = storeSettings?.print_gstin ?? true;
     let branchGstin = "";
-    if (isBranch1 && printGstinEnabled) {
-      branchGstin = "GSTIN: 08GSFPD9061R1ZY";
+    if (printGstinEnabled && storeSettings?.gstin) {
+      branchGstin = `GSTIN: ${storeSettings.gstin}`;
     }
 
     doc.setFont("helvetica", "normal");
@@ -756,6 +768,20 @@ export default function POS() {
     
     doc.save(`Invoice_${printSnapshot.invoiceNumber}.pdf`);
   };
+
+  if (user?.role === "superadmin") {
+    return (
+      <div className="max-w-2xl mx-auto mt-10">
+        <Card className="text-center p-8 bg-slate-900 border-slate-800 shadow-2xl shadow-black/50 text-white">
+          <AlertCircle className="mx-auto text-amber-500 mb-4 animate-bounce" size={64} />
+          <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
+          <p className="text-slate-400 mb-6">
+            Superadmin accounts have read-only access and are not allowed to create sales invoices or access the billing terminal.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   if (completedSale) {
     return (
@@ -1023,13 +1049,13 @@ export default function POS() {
             <div className="space-y-4 flex-1">
               <div className="space-y-2">
                 <Label className="text-slate-300">Billing Branch</Label>
-                <Select value={branch} onValueChange={handleBranchChange}>
+                <Select value={selectedBranchId.toString()} onValueChange={handleBranchChange}>
                   <SelectTrigger className="bg-slate-950 border-slate-700 text-white">
-                    <SelectValue />
+                    <SelectValue placeholder="Select Branch" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-700 text-white">
-                    <SelectItem value="Branch 1">Branch 1 (Chandan Vihar)</SelectItem>
-                    <SelectItem value="Branch 2">Branch 2 (Shivpuri)</SelectItem>
+                    <SelectItem value="1">Branch 1 (Chandan Vihar)</SelectItem>
+                    <SelectItem value="2">Branch 2 (Shivpuri)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -21,6 +21,12 @@ export default function PurchasesList() {
   const { data: purchasesData, loading } = purchases;
   const [search, setSearch] = useState("");
   
+  const getBranchName = (id?: number) => {
+    if (id === 1) return "Branch 1 (Chandan Vihar)";
+    if (id === 2) return "Branch 2 (Shivpuri)";
+    return `Branch ${id || ""}`;
+  };
+  
   // Inward Details Modal State
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<number | null>(null);
   const [purchaseDetail, setPurchaseDetail] = useState<any | null>(null);
@@ -57,68 +63,104 @@ export default function PurchasesList() {
     (p.supplier?.company_name && p.supplier.company_name.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const handlePrintInwardPDF = () => {
+  const loadLogo = (): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = "/logo.png";
+      img.onload = () => resolve(img);
+      img.onerror = (err) => reject(err);
+    });
+  };
+
+  const getBranchDetails = (id?: number) => {
+    if (id === 2) {
+      return {
+        address: "House No. 192-A, Shivpuri, BudhiSingh Pura, Jaipur, Rajasthan",
+        phone: "+91 8307407566",
+        email: "medxpharmacy7170@gmail.com",
+        gstin: "08GSFPD9061R1ZY"
+      };
+    }
+    return {
+      address: "Plot No. 20A, Chandan Vihar, Near Coaching Hub, Jaipur, Rajasthan",
+      phone: "+91 9145887170",
+      email: "medxpharmacy7170@gmail.com",
+      gstin: "08GSFPD9061R1ZY"
+    };
+  };
+
+  const handlePrintInwardPDF = async () => {
     if (!purchaseDetail) return;
     
     const doc = new jsPDF();
     
-    // Top border line
-    doc.setDrawColor(79, 70, 229);
-    doc.setLineWidth(1.5);
-    doc.line(14, 15, 196, 15);
+    // Top Accent Bar (Inspired by POS/HTML template)
+    doc.setFillColor(67, 56, 202); // #4338CA
+    doc.rect(14, 15, 182, 3, "F");
     
-    // Header
+    let textXOffset = 14;
+    try {
+      const logoImg = await loadLogo();
+      doc.addImage(logoImg, "PNG", 14, 22, 12, 12);
+      textXOffset = 28;
+    } catch (e) {
+      console.error("Failed to load logo.png, printing without it", e);
+    }
+    
+    // Header Title
     doc.setFont("helvetica", "bold");
     doc.setFontSize(22);
-    doc.setTextColor(30, 41, 59);
-    doc.text("Med-X Pharmacy", 14, 28);
+    doc.setTextColor(67, 56, 202); // #4338CA
+    doc.text("Med-X Pharmacy", textXOffset, 31);
+    
+    const details = getBranchDetails(purchaseDetail.branch_id);
     
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
+    doc.setFontSize(8.5);
     doc.setTextColor(100, 116, 139);
-    doc.text(`Inward Stock Receipt | Branch: ${purchaseDetail.branch || "Branch 1"}`, 14, 34);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 39);
+    doc.text(details.address, textXOffset, 37);
+    doc.text(`Contact: ${details.phone} | Email: ${details.email} | GSTIN: ${details.gstin}`, textXOffset, 42);
     
-    // Invoice Badge
-    doc.setFillColor(79, 70, 229);
-    doc.rect(125, 22, 71, 8, "F");
+    // Goods Inward Note Badge
+    doc.setFillColor(67, 56, 202);
+    doc.rect(130, 22, 66, 8, "F");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.5);
+    doc.setFontSize(9);
     doc.setTextColor(255, 255, 255);
-    doc.text("GOODS INWARD NOTE", 132, 27.5);
+    doc.text("GOODS INWARD NOTE", 135, 27.5);
     
     // Summary Box
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226, 232, 240);
-    doc.rect(14, 46, 182, 24, "FD");
+    doc.setFillColor(247, 248, 252);
+    doc.setDrawColor(230, 231, 238);
+    doc.rect(14, 48, 182, 24, "FD");
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(107, 114, 128);
+    doc.text("SUPPLIER INVOICE #:", 18, 54);
+    doc.text("INWARD DATE:", 18, 60);
+    doc.text("VENDOR / SUPPLIER:", 18, 66);
     
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139);
-    doc.text("SUPPLIER INVOICE #:", 18, 53);
-    doc.text("INWARD DATE:", 18, 59);
-    doc.text("VENDOR / SUPPLIER:", 18, 65);
+    doc.setTextColor(28, 30, 41);
+    doc.text(purchaseDetail.invoice_number || "N/A", 60, 54);
+    doc.text(purchaseDetail.purchase_date || "N/A", 60, 60);
+    doc.text(purchaseDetail.supplier?.name || `Supplier #${purchaseDetail.supplier_id}`, 60, 66);
     
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(15, 23, 42);
-    doc.text(purchaseDetail.invoice_number || "N/A", 60, 53);
-    doc.text(purchaseDetail.purchase_date || "N/A", 60, 59);
-    doc.text(purchaseDetail.supplier?.name || `Supplier #${purchaseDetail.supplier_id}`, 60, 65);
+    doc.setFontSize(7.5);
+    doc.setTextColor(107, 114, 128);
+    doc.text("COMPANY:", 115, 54);
+    doc.text("GSTIN:", 115, 60);
+    doc.text("TOTAL AMOUNT:", 115, 66);
     
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139);
-    doc.text("COMPANY:", 115, 53);
-    doc.text("GSTIN:", 115, 59);
-    doc.text("TOTAL AMOUNT:", 115, 65);
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(15, 23, 42);
-    doc.text(purchaseDetail.supplier?.company_name || "N/A", 145, 53);
-    doc.text(purchaseDetail.supplier?.gst_number || "N/A", 145, 59);
-    doc.text(`₹${purchaseDetail.grand_total.toFixed(2)}`, 145, 65);
+    doc.setTextColor(28, 30, 41);
+    doc.text(purchaseDetail.supplier?.company_name || "N/A", 145, 54);
+    doc.text(purchaseDetail.supplier?.gst_number || "N/A", 145, 60);
+    doc.text(`Rs. ${purchaseDetail.grand_total.toFixed(2)}`, 145, 66);
     
     // Items table
     const tableData = (purchaseDetail.items || []).map((item: any, idx: number) => [
@@ -127,47 +169,47 @@ export default function PurchasesList() {
       item.batch_number,
       item.expiry_date,
       item.quantity,
-      `₹${item.purchase_price.toFixed(2)}`,
-      `₹${item.mrp.toFixed(2)}`,
-      `₹${item.selling_price.toFixed(2)}`,
-      `₹${(item.quantity * item.purchase_price).toFixed(2)}`
+      `Rs. ${item.purchase_price.toFixed(2)}`,
+      `Rs. ${item.mrp.toFixed(2)}`,
+      `Rs. ${item.selling_price.toFixed(2)}`,
+      `Rs. ${(item.quantity * item.purchase_price).toFixed(2)}`
     ]);
 
     autoTable(doc, {
-      startY: 76,
-      head: [["#", "Product Name", "Batch", "Expiry", "Qty", "Cost (₹)", "MRP (₹)", "Selling (₹)", "Total (₹)"]],
+      startY: 78,
+      head: [["#", "Product Name", "Batch", "Expiry", "Qty", "Cost (Rs.)", "MRP (Rs.)", "Selling (Rs.)", "Total (Rs.)"]],
       body: tableData,
       theme: 'grid',
       headStyles: { 
-        fillColor: [79, 70, 229], 
+        fillColor: [67, 56, 202], 
         textColor: 255, 
         fontStyle: 'bold',
-        fontSize: 8
+        fontSize: 8.5
       },
       styles: {
-        fontSize: 7.5,
-        cellPadding: 2.5,
-        textColor: [51, 65, 85]
+        fontSize: 8,
+        cellPadding: 3,
+        textColor: [28, 30, 41]
       },
       alternateRowStyles: {
-        fillColor: [248, 250, 252]
+        fillColor: [251, 251, 254]
       }
     });
 
     const finalY = (doc as any).lastAutoTable.finalY + 8;
     
     // Total Box
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(247, 248, 252);
+    doc.setDrawColor(230, 231, 238);
     doc.rect(120, finalY, 76, 14, "FD");
     
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(15, 23, 42);
-    doc.text("Inward Grand Total:", 125, finalY + 9);
-    doc.setFontSize(11);
-    doc.setTextColor(79, 70, 229);
-    doc.text(`₹${purchaseDetail.grand_total.toFixed(2)}`, 165, finalY + 9);
+    doc.setFontSize(9.5);
+    doc.setTextColor(28, 30, 41);
+    doc.text("Inward Grand Total:", 124, finalY + 9);
+    doc.setFontSize(10.5);
+    doc.setTextColor(67, 56, 202);
+    doc.text(`Rs. ${purchaseDetail.grand_total.toFixed(2)}`, 192, finalY + 9, { align: "right" });
     
     doc.save(`Inward_Receipt_${purchaseDetail.invoice_number || purchaseDetail.id}.pdf`);
   };
@@ -238,11 +280,9 @@ export default function PurchasesList() {
                       </div>
                     )}
                   </TableCell>
-                  <TableCell>
                     <span className="text-xs text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                      {purchase.branch || "Branch 1"}
+                      {getBranchName(purchase.branch_id)}
                     </span>
-                  </TableCell>
                   <TableCell>
                     <div className="font-bold text-emerald-400 font-mono">₹{purchase.grand_total.toFixed(2)}</div>
                   </TableCell>
@@ -328,7 +368,7 @@ export default function PurchasesList() {
                         Date: <span className="text-white">{purchaseDetail.purchase_date}</span>
                       </div>
                       <div className="text-sm font-medium text-slate-200">
-                        Branch: <span className="text-white">{purchaseDetail.branch || "Branch 1"}</span>
+                        Branch: <span className="text-white">{getBranchName(purchaseDetail.branch_id)}</span>
                       </div>
                       <div className="text-xs text-slate-500 font-mono">
                         GSTIN: {purchaseDetail.supplier?.gst_number || "N/A"}

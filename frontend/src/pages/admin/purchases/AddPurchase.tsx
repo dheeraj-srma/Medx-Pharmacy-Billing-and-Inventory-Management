@@ -4,13 +4,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../../../services/api";
+import { useAuthStore } from "../../../store/authStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Save, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, AlertCircle } from "lucide-react";
 
 const purchaseItemSchema = z.object({
   product_id: z.coerce.number().min(1, "Product is required"),
@@ -80,8 +81,9 @@ export default function AddPurchase() {
     try {
       setIsSubmitting(true);
       
+      const { branch, ...restOfData } = data as any;
       const payload = {
-        ...data,
+        ...restOfData,
         total_amount: grandTotal,
         grand_total: grandTotal,
       };
@@ -95,6 +97,22 @@ export default function AddPurchase() {
       setIsSubmitting(false);
     }
   };
+
+  const { user } = useAuthStore();
+
+  if (user?.role === "superadmin") {
+    return (
+      <div className="max-w-2xl mx-auto mt-10">
+        <Card className="text-center p-8 bg-slate-900 border-slate-800 shadow-2xl shadow-black/50 text-white">
+          <AlertCircle className="mx-auto text-amber-500 mb-4 animate-bounce" size={64} />
+          <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
+          <p className="text-slate-400 mb-6">
+            Superadmin accounts have read-only access and are not allowed to register inward stock purchases.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
@@ -137,18 +155,7 @@ export default function AddPurchase() {
               {errors.purchase_date && <p className="text-sm text-red-500">{errors.purchase_date.message}</p>}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="branch">Inward Branch *</Label>
-              <Select defaultValue="Branch 1" onValueChange={(val) => setValue("branch", val)}>
-                <SelectTrigger className="bg-slate-950 border-slate-700 text-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-700 text-white">
-                  <SelectItem value="Branch 1">Branch 1 (Chandan Vihar)</SelectItem>
-                  <SelectItem value="Branch 2">Branch 2 (Shivpuri)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+
 
             <div className="col-span-4 space-y-2">
               <Label htmlFor="notes">Notes</Label>

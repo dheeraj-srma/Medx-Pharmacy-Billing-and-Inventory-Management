@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
   Save, ShieldAlert, Sparkles, Sliders, UserPlus, Key, Edit2, 
-  Trash2, Database, RefreshCw, Download, CheckCircle2
+  Trash2, Database, RefreshCw, Download, CheckCircle2, UserX
 } from "lucide-react";
 import {
   Table,
@@ -43,11 +43,12 @@ export default function Settings() {
   const [users, setUsers] = useState<any[]>([]);
   const [showAddUser, setShowAddUser] = useState(false);
   const [showEditUser, setShowEditUser] = useState<any | null>(null);
-  const [newUser, setNewUser] = useState({
+  const [newUser, setNewUser] = useState<any>({
     email: "",
     full_name: "",
     password: "",
-    role: "STAFF"
+    role: "STAFF",
+    branch_id: 1
   });
   const [editUserForm, setEditUserForm] = useState({
     full_name: "",
@@ -154,10 +155,14 @@ export default function Settings() {
       return;
     }
     try {
-      await api.post("/auth/register", newUser);
+      const payload = { ...newUser };
+      if (payload.role !== "STAFF") {
+        delete payload.branch_id;
+      }
+      await api.post("/auth/register", payload);
       alert("Staff registered successfully!");
       setShowAddUser(false);
-      setNewUser({ email: "", full_name: "", password: "", role: "STAFF" });
+      setNewUser({ email: "", full_name: "", password: "", role: "STAFF", branch_id: 1 });
       fetchUsers();
     } catch (error: any) {
       console.error("Failed to register staff", error);
@@ -214,6 +219,18 @@ export default function Settings() {
     } catch (error) {
       console.error("Failed to deactivate staff", error);
       alert("Deactivation failed");
+    }
+  };
+
+  const handleDeleteUser = async (userId: number) => {
+    if (!confirm("Are you sure you want to permanently delete this staff member? This action cannot be undone.")) return;
+    try {
+      await api.delete(`/auth/users/${userId}/hard`);
+      alert("Staff member permanently deleted successfully!");
+      fetchUsers();
+    } catch (error: any) {
+      console.error("Failed to delete staff", error);
+      alert(error.response?.data?.detail || "Deletion failed. Users with transaction history cannot be deleted; please deactivate them instead.");
     }
   };
 
@@ -482,6 +499,9 @@ export default function Settings() {
                                     <Trash2 size={14} />
                                   </Button>
                                 )}
+                                <Button variant="ghost" size="icon" onClick={() => handleDeleteUser(user.id)} className="text-red-500 hover:text-red-400 hover:bg-red-950/20 h-8 w-8" title="Delete Account Permanently">
+                                  <UserX size={14} />
+                                </Button>
                               </div>
                             </TableCell>
                           </TableRow>
@@ -664,6 +684,24 @@ export default function Settings() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {newUser.role === "STAFF" && (
+                <div className="space-y-2">
+                  <Label htmlFor="regBranch" className="text-slate-300">Default Branch</Label>
+                  <Select 
+                    value={newUser.branch_id?.toString() || "1"} 
+                    onValueChange={(v) => setNewUser({...newUser, branch_id: parseInt(v)})}
+                  >
+                    <SelectTrigger className="bg-slate-950 border-slate-800 text-white">
+                      <SelectValue placeholder="Select Branch" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-700 text-white">
+                      <SelectItem value="1">Branch 1 (Chandan Vihar)</SelectItem>
+                      <SelectItem value="2">Branch 2 (Shivpuri)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
                 <Button variant="outline" onClick={() => setShowAddUser(false)} className="bg-slate-950 border-slate-800 text-slate-300">

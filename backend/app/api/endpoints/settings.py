@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from typing import Optional
 from app.api import deps
 from app.models.settings import StoreSettings
+from app.models.user import RoleEnum, User
 from app.schemas.settings import StoreSettingsResponse, StoreSettingsUpdate
-from app.models.user import User
 import os
 import shutil
 import glob
@@ -13,18 +14,31 @@ from datetime import datetime, timezone
 
 router = APIRouter()
 
-def get_or_create_settings(db: Session) -> StoreSettings:
-    settings = db.query(StoreSettings).first()
+def get_or_create_settings(db: Session, branch_id: int) -> StoreSettings:
+    settings = db.query(StoreSettings).filter(StoreSettings.branch_id == branch_id).first()
     if not settings:
-        settings = StoreSettings(
-            store_name="MedX Pharmacy",
-            phone="+91 9145887170",
-            email="medxpharmacy7170@gmail.com",
-            address="Plot No. 20A, Chandan Vihar, Near Coaching Hub, Jaipur, Rajasthan",
-            gstin="08GSFPD9061R1ZY",
-            default_tax_rate=12.0,
-            print_gstin=True
-        )
+        if branch_id == 2:
+            settings = StoreSettings(
+                store_name="MedX Pharmacy",
+                phone="+91 8307407566",
+                email="medxpharmacy7170@gmail.com",
+                address="House No. 192-A, Shivpuri, BudhiSingh Pura, Jaipur, Rajasthan",
+                gstin="",
+                default_tax_rate=12.0,
+                print_gstin=False,
+                branch_id=2
+            )
+        else:
+            settings = StoreSettings(
+                store_name="MedX Pharmacy",
+                phone="+91 9145887170",
+                email="medxpharmacy7170@gmail.com",
+                address="Plot No. 20A, Chandan Vihar, Near Coaching Hub, Jaipur, Rajasthan",
+                gstin="08GSFPD9061R1ZY",
+                default_tax_rate=12.0,
+                print_gstin=True,
+                branch_id=branch_id
+            )
         db.add(settings)
         db.commit()
         db.refresh(settings)
@@ -32,10 +46,15 @@ def get_or_create_settings(db: Session) -> StoreSettings:
 
 @router.get("/", response_model=StoreSettingsResponse)
 def get_settings(
+    branch_id: Optional[int] = None,
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
-    settings = get_or_create_settings(db)
+    if current_user.role == RoleEnum.SUPERADMIN:
+        bid = branch_id or 1
+    else:
+        bid = current_user.branch_id
+    settings = get_or_create_settings(db, bid)
     return settings
 
 @router.put("/", response_model=StoreSettingsResponse)
@@ -44,7 +63,13 @@ def update_settings(
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
-    settings = get_or_create_settings(db)
+    if current_user.role == RoleEnum.SUPERADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Superadmin has read-only access and cannot update settings."
+        )
+    bid = current_user.branch_id
+    settings = get_or_create_settings(db, bid)
     
     update_data = settings_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():

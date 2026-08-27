@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.database.database import Base
 
@@ -11,4 +12,7 @@ class Customer(Base):
     email = Column(String, nullable=True)
     address = Column(Text, nullable=True)
     doctor_name = Column(String, nullable=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    branch = relationship("Branch", back_populates="customers")

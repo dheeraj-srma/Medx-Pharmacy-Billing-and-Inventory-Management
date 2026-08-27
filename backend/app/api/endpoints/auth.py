@@ -24,7 +24,10 @@ def login_access_token(
         raise HTTPException(status_code=400, detail="Inactive user")
     
     return {
-        "access_token": create_access_token(user.email),
+        "access_token": create_access_token(
+            user.email,
+            additional_claims={"role": user.role.value, "branch_id": user.branch_id}
+        ),
         "token_type": "bearer",
     }
 
@@ -47,7 +50,8 @@ def register_user(
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
         full_name=user_in.full_name,
-        role=user_in.role
+        role=user_in.role,
+        branch_id=user_in.branch_id
     )
     db.add(user)
     db.commit()
@@ -123,3 +127,24 @@ def delete_user(
     db.commit()
     db.refresh(db_user)
     return db_user
+
+@router.delete("/users/{user_id}/hard", response_model=UserResponse)
+def hard_delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_active_admin)
+):
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    try:
+        db.delete(db_user)
+        db.commit()
+        return db_user
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete user because they have recorded sales or inventory actions in the system. You can deactivate them instead."
+        )

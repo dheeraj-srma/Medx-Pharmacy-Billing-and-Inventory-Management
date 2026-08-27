@@ -16,8 +16,21 @@ import Dashboard from "./pages/admin/Dashboard";
 import Settings from "./pages/admin/Settings";
 import InventoryList from "./pages/admin/inventory/InventoryList";
 import Reports from "./pages/admin/reports/Reports";
+import Login from "./pages/Login";
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  // Authentication bypassed
+  const { token } = useAuthStore();
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+}
+
+function PublicRoute({ children }: { children: React.ReactNode }) {
+  const { token } = useAuthStore();
+  if (token) {
+    return <Navigate to="/admin" replace />;
+  }
   return <>{children}</>;
 }
 
@@ -49,7 +62,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<Navigate to="/admin" replace />} />
+        <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/" element={<Navigate to="/admin" replace />} />
         
         <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>

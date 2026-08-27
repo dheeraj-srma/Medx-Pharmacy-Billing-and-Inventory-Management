@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
@@ -7,7 +7,7 @@ from app.api import deps
 from app.models.inventory import InventoryBatch, InventoryTransaction, TransactionTypeEnum
 from app.schemas.inventory import InventoryBatchResponse, InventoryBatchListResponse, InventoryTransactionListResponse, StockAdjustmentRequest
 from app.models.product import Product
-from app.models.user import User
+from app.models.user import User, RoleEnum
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -27,19 +27,17 @@ class ActiveBatchResponse(BaseModel):
     quantity_available: float
     mrp: float
     selling_price: float
-    branch: Optional[str] = None
+    branch_id: Optional[int] = None
 
     class Config:
         from_attributes = True
 
 @router.get("/active-batches", response_model=List[ActiveBatchResponse])
 def get_active_batches(
-    branch: Optional[str] = None,
+    branch_id: Optional[int] = None,
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
-    # Fetch all active batches that have quantity > 0 and are not expired
-    # Join with product to get product details for POS search & billing
     today = date.today()
     query = db.query(
         InventoryBatch.id,
@@ -56,15 +54,17 @@ def get_active_batches(
         InventoryBatch.quantity_available,
         InventoryBatch.mrp,
         InventoryBatch.selling_price,
-        InventoryBatch.branch
+        InventoryBatch.branch_id
     ).join(Product, Product.id == InventoryBatch.product_id)\
      .filter(Product.is_active == True)\
      .filter(Product.is_archived == False)\
      .filter(InventoryBatch.quantity_available > 0)\
      .filter(InventoryBatch.expiry_date >= today)
 
-    if branch:
-        query = query.filter(InventoryBatch.branch == branch)
+    if branch_id:
+        query = query.filter(InventoryBatch.branch_id == branch_id)
+    elif current_user.role != RoleEnum.SUPERADMIN:
+        query = query.filter(InventoryBatch.branch_id == current_user.branch_id)
 
     results = query.order_by(Product.name.asc(), InventoryBatch.expiry_date.asc()).all()
     
@@ -85,7 +85,7 @@ def get_active_batches(
             "quantity_available": row.quantity_available,
             "mrp": row.mrp,
             "selling_price": row.selling_price,
-            "branch": row.branch
+            "branch_id": row.branch_id
         })
     return batches
 
@@ -93,6 +93,7 @@ def get_active_batches(
 def get_all_batches(
     search: Optional[str] = None,
     filter_status: Optional[str] = None,
+    branch_id: Optional[int] = None,
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
@@ -102,6 +103,12 @@ def get_all_batches(
         Product.sku.label("product_sku")
     ).join(Product, Product.id == InventoryBatch.product_id)
     
+    if current_user.role == RoleEnum.SUPERADMIN:
+        if branch_id:
+            query = query.filter(InventoryBatch.branch_id == branch_id)
+    else:
+        query = query.filter(InventoryBatch.branch_id == current_user.branch_id)
+        
     if search:
         query = query.filter(
             (Product.name.ilike(f"%{search}%")) |
@@ -139,6 +146,7 @@ def get_all_batches(
             "supplier_id": batch_obj.supplier_id,
             "created_at": batch_obj.created_at,
             "updated_at": batch_obj.updated_at,
+            "branch_id": batch_obj.branch_id,
             "product_name": prod_name,
             "product_sku": prod_sku
         }
@@ -147,20 +155,27 @@ def get_all_batches(
 
 @router.get("/transactions", response_model=List[InventoryTransactionListResponse])
 def get_transactions(
+    branch_id: Optional[int] = None,
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
     from app.models.user import User as UserModel
-    results = db.query(
+    query = db.query(
         InventoryTransaction,
         Product.name.label("product_name"),
         InventoryBatch.batch_number.label("batch_number"),
         UserModel.full_name.label("user_name")
     ).join(Product, Product.id == InventoryTransaction.product_id)\
      .join(InventoryBatch, InventoryBatch.id == InventoryTransaction.batch_id)\
-     .join(UserModel, UserModel.id == InventoryTransaction.user_id)\
-     .order_by(InventoryTransaction.timestamp.desc())\
-     .all()
+     .join(UserModel, UserModel.id == InventoryTransaction.user_id)
+     
+    if current_user.role == RoleEnum.SUPERADMIN:
+        if branch_id:
+            query = query.filter(InventoryTransaction.branch_id == branch_id)
+    else:
+        query = query.filter(InventoryTransaction.branch_id == current_user.branch_id)
+        
+    results = query.order_by(InventoryTransaction.timestamp.desc()).all()
      
     txns = []
     for txn_obj, prod_name, batch_num, user_name in results:
@@ -175,6 +190,7 @@ def get_transactions(
             "notes": txn_obj.notes,
             "user_id": txn_obj.user_id,
             "timestamp": txn_obj.timestamp,
+            "branch_id": txn_obj.branch_id,
             "product_name": prod_name,
             "batch_number": batch_num,
             "user_name": user_name
@@ -188,9 +204,24 @@ def adjust_stock(
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
-    batch = db.query(InventoryBatch).filter(InventoryBatch.id == adjust_in.batch_id).with_for_update().first()
+    if current_user.role == RoleEnum.SUPERADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Superadmin has read-only access and cannot adjust stock."
+        )
+        
+    batch = db.query(InventoryBatch).filter(
+        InventoryBatch.id == adjust_in.batch_id
+    ).with_for_update().first()
+    
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
+        
+    if batch.branch_id != current_user.branch_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. Batch does not belong to your branch."
+        )
         
     if adjust_in.quantity_change < 0 and batch.quantity_available < abs(adjust_in.quantity_change):
         raise HTTPException(status_code=400, detail="Cannot adjust below available quantity")
@@ -206,6 +237,7 @@ def adjust_stock(
         reference_id=str(current_user.id),
         notes=adjust_in.notes or "Manual adjustment",
         user_id=current_user.id,
+        branch_id=current_user.branch_id,
         timestamp=datetime.now(timezone.utc)
     )
     db.add(batch)
