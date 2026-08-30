@@ -1,3 +1,4 @@
+from app.core.timezone import IST
 from datetime import datetime, timedelta
 from typing import Any, Union
 from jose import jwt
@@ -14,9 +15,9 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(subject: Union[str, Any], expires_delta: timedelta = None, additional_claims: dict = None) -> str:
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(IST) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(IST) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode = {"exp": expire, "sub": str(subject)}
     if additional_claims:
         to_encode.update(additional_claims)

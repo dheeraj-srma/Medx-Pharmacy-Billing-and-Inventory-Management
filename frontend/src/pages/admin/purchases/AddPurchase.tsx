@@ -1,3 +1,4 @@
+import { useModal } from "@/providers/ModalProvider";
 import { useState, useEffect } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -36,6 +37,7 @@ const purchaseSchema = z.object({
 type PurchaseFormValues = z.infer<typeof purchaseSchema>;
 
 export default function AddPurchase() {
+  const { showAlert } = useModal();
   const navigate = useNavigate();
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -92,7 +94,7 @@ export default function AddPurchase() {
       navigate("/admin/purchases");
     } catch (error) {
       console.error("Failed to add purchase", error);
-      alert("Failed to record purchase. Please check your inputs.");
+      showAlert("Error", "Failed to record purchase. Please check your inputs.");
     } finally {
       setIsSubmitting(false);
     }

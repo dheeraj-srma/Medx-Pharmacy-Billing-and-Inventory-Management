@@ -1,3 +1,4 @@
+import { useModal } from "@/providers/ModalProvider";
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,6 +25,7 @@ const supplierSchema = z.object({
 });
 
 export default function AddSupplier() {
+  const { showAlert } = useModal();
   const { id } = useParams<{ id?: string }>();
   const isEditMode = Boolean(id);
   const navigate = useNavigate();
@@ -60,7 +62,7 @@ export default function AddSupplier() {
         })
         .catch(err => {
           console.error("Failed to load supplier", err);
-          alert("Failed to load supplier details.");
+          showAlert("Error", "Failed to load supplier details.");
           navigate("/admin/suppliers");
         })
         .finally(() => {
@@ -94,7 +96,7 @@ export default function AddSupplier() {
     } catch (error: any) {
       console.error("Failed to save supplier", error);
       const detail = error.response?.data?.detail;
-      alert(detail || `Failed to ${isEditMode ? "update" : "add"} supplier. Please check your inputs.`);
+      showAlert("Error", detail || `Failed to ${isEditMode ? "update" : "add"} supplier. Please check your inputs.`);
     } finally {
       setIsSubmitting(false);
     }

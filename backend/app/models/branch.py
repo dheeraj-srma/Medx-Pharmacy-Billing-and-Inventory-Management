@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from sqlalchemy.orm import relationship
+from app.core.timezone import IST
 from datetime import datetime, timezone
 from app.database.database import Base
 
@@ -13,7 +14,7 @@ class Branch(Base):
     phone = Column(String, nullable=True)
     email = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(IST))
 
     users = relationship("User", back_populates="branch")
     customers = relationship("Customer", back_populates="branch")

@@ -10,6 +10,7 @@ from app.schemas.settings import StoreSettingsResponse, StoreSettingsUpdate
 import os
 import shutil
 import glob
+from app.core.timezone import IST
 from datetime import datetime, timezone
 
 router = APIRouter()
@@ -90,7 +91,7 @@ def create_database_backup(
 ):
     try:
         os.makedirs(BACKUP_DIR, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        timestamp = datetime.now(IST).strftime("%Y%m%d-%H%M%S")
         backup_filename = f"backup-{timestamp}.db"
         dest_path = os.path.join(BACKUP_DIR, backup_filename)
         
@@ -117,7 +118,7 @@ def list_backups(
             backups_list.append({
                 "filename": os.path.basename(f),
                 "size_bytes": stat.st_size,
-                "created_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
+                "created_at": datetime.fromtimestamp(stat.st_mtime, tz=IST).isoformat()
             })
         backups_list.sort(key=lambda x: x["created_at"], reverse=True)
         return backups_list

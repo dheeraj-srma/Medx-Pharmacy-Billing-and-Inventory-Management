@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime
+from app.core.timezone import IST
 from datetime import datetime, timezone
 from app.database.database import Base
 
@@ -14,4 +15,4 @@ class Supplier(Base):
     gst_number = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(IST))

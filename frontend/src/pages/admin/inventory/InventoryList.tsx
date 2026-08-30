@@ -1,3 +1,4 @@
+import { useModal } from "@/providers/ModalProvider";
 import { useState, useEffect, useCallback } from "react";
 import api from "../../../services/api";
 import { useDataStore } from "../../../store/dataStore";
@@ -12,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Search, Sliders } from "lucide-react";
 
 export default function InventoryList() {
+  const { showAlert } = useModal();
   const [activeTab, setActiveTab] = useState("batches");
 
   // Filters and Search
@@ -94,7 +96,7 @@ export default function InventoryList() {
       };
 
       await api.post("/inventory/adjust", payload);
-      alert("Stock adjusted successfully!");
+      showAlert("Success", "Stock adjusted successfully!");
       setSelectedBatch(null);
       setQuantityChange("");
       setNotes("");
@@ -105,7 +107,7 @@ export default function InventoryList() {
       refetchTransactions();
     } catch (error: any) {
       console.error("Adjustment failed", error);
-      alert(error.response?.data?.detail || "Adjustment failed");
+      showAlert("Error", error.response?.data?.detail || "Adjustment failed");
     } finally {
       setIsAdjusting(false);
     }

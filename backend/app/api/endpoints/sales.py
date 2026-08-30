@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func
 from typing import List, Optional
+from app.core.timezone import IST
 from datetime import datetime, timezone, date
 import uuid
 from app.api import deps
@@ -53,7 +54,7 @@ def create_sale(
     try:
         invoice_number = sale.invoice_number
         if not invoice_number:
-            now_str = datetime.now().strftime("%Y%m%d%H%M%S")
+            now_str = datetime.now(IST).strftime("%Y%m%d%H%M%S")
             short_uuid = str(uuid.uuid4())[:4].upper()
             invoice_number = f"INV-{now_str}-{short_uuid}"
 
@@ -113,7 +114,7 @@ def create_sale(
                 notes=f"Sale Invoice: {invoice_number}",
                 user_id=current_user.id,
                 branch_id=sale_branch_id,
-                timestamp=datetime.now(timezone.utc)
+                timestamp=datetime.now(IST)
             )
             db.add(transaction)
             

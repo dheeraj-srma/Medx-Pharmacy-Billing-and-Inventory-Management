@@ -1,3 +1,4 @@
+import { useModal } from "@/providers/ModalProvider";
 import { useState, useEffect } from "react";
 import api from "../../services/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -25,6 +26,7 @@ import {
 } from "@/components/ui/select";
 
 export default function Settings() {
+  const { showAlert, showConfirm } = useModal();
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("store_profile");
@@ -139,10 +141,10 @@ export default function Settings() {
         defaultTaxRate: res.data.default_tax_rate?.toString() || "12",
         printGstin: res.data.print_gstin ?? true,
       });
-      alert("Settings saved successfully!");
+      showAlert("Success", "Settings saved successfully!");
     } catch (error) {
       console.error("Failed to save settings", error);
-      alert("Failed to save settings. Please try again.");
+      showAlert("Error", "Failed to save settings. Please try again.");
     } finally {
       setIsSaving(false);
     }
@@ -151,7 +153,7 @@ export default function Settings() {
   // User Actions
   const handleAddUser = async () => {
     if (!newUser.email || !newUser.password || !newUser.full_name) {
-      alert("Please fill all required fields");
+      showAlert("Warning", "Please fill all required fields");
       return;
     }
     try {
@@ -160,13 +162,13 @@ export default function Settings() {
         delete payload.branch_id;
       }
       await api.post("/auth/register", payload);
-      alert("Staff registered successfully!");
+      showAlert("Success", "Staff registered successfully!");
       setShowAddUser(false);
       setNewUser({ email: "", full_name: "", password: "", role: "STAFF", branch_id: 1 });
       fetchUsers();
     } catch (error: any) {
       console.error("Failed to register staff", error);
-      alert(error.response?.data?.detail || "Registration failed");
+      showAlert("Error", error.response?.data?.detail || "Registration failed");
     }
   };
 
@@ -183,54 +185,54 @@ export default function Settings() {
     if (!showEditUser) return;
     try {
       await api.put(`/auth/users/${showEditUser.id}`, editUserForm);
-      alert("User updated successfully!");
+      showAlert("Success", "User updated successfully!");
       setShowEditUser(null);
       fetchUsers();
     } catch (error: any) {
       console.error("Failed to update user", error);
-      alert(error.response?.data?.detail || "Failed to update user");
+      showAlert("Error", error.response?.data?.detail || "Failed to update user");
     }
   };
 
   const handleResetPassword = async () => {
     if (!showResetPasswordModal || !resetPassword) {
-      alert("Please enter a new password");
+      showAlert("Warning", "Please enter a new password");
       return;
     }
     try {
       await api.put(`/auth/users/${showResetPasswordModal.id}/password`, {
         password: resetPassword
       });
-      alert("Password updated successfully!");
+      showAlert("Success", "Password updated successfully!");
       setShowResetPasswordModal(null);
       setResetPassword("");
     } catch (error: any) {
       console.error("Failed to reset password", error);
-      alert(error.response?.data?.detail || "Reset password failed");
+      showAlert("Error", error.response?.data?.detail || "Reset password failed");
     }
   };
 
   const handleDeactivateUser = async (userId: number) => {
-    if (!confirm("Are you sure you want to deactivate this staff member?")) return;
+    if (!await showConfirm("Deactivate Staff", "Are you sure you want to deactivate this staff member?")) return;
     try {
       await api.delete(`/auth/users/${userId}`);
-      alert("Staff member deactivated successfully!");
+      showAlert("Success", "Staff member deactivated successfully!");
       fetchUsers();
     } catch (error) {
       console.error("Failed to deactivate staff", error);
-      alert("Deactivation failed");
+      showAlert("Error", "Deactivation failed");
     }
   };
 
   const handleDeleteUser = async (userId: number) => {
-    if (!confirm("Are you sure you want to permanently delete this staff member? This action cannot be undone.")) return;
+    if (!await showConfirm("Delete Staff", "Are you sure you want to permanently delete this staff member? This action cannot be undone.")) return;
     try {
       await api.delete(`/auth/users/${userId}/hard`);
-      alert("Staff member permanently deleted successfully!");
+      showAlert("Success", "Staff member permanently deleted successfully!");
       fetchUsers();
     } catch (error: any) {
       console.error("Failed to delete staff", error);
-      alert(error.response?.data?.detail || "Deletion failed. Users with transaction history cannot be deleted; please deactivate them instead.");
+      showAlert("Error", error.response?.data?.detail || "Deletion failed. Users with transaction history cannot be deleted; please deactivate them instead.");
     }
   };
 
@@ -239,11 +241,11 @@ export default function Settings() {
     setIsBackingUp(true);
     try {
       const res = await api.post("/settings/backup");
-      alert(`Backup created successfully: ${res.data.filename}`);
+      showAlert("Success", `Backup created successfully: ${res.data.filename}`);
       fetchBackups();
     } catch (error) {
       console.error("Failed to create database backup", error);
-      alert("Backup creation failed.");
+      showAlert("Error", "Backup creation failed.");
     } finally {
       setIsBackingUp(false);
     }
@@ -263,19 +265,19 @@ export default function Settings() {
       link.remove();
     } catch (error) {
       console.error("Failed to download backup", error);
-      alert("Download failed.");
+      showAlert("Error", "Download failed.");
     }
   };
 
   const handleDeleteBackup = async (filename: string) => {
-    if (!confirm(`Are you sure you want to delete backup file: ${filename}?`)) return;
+    if (!await showConfirm("Delete Backup", `Are you sure you want to delete backup file: ${filename}?`)) return;
     try {
       await api.delete(`/settings/backups/${filename}`);
-      alert("Backup deleted successfully.");
+      showAlert("Success", "Backup deleted successfully.");
       fetchBackups();
     } catch (error) {
       console.error("Failed to delete backup", error);
-      alert("Delete failed.");
+      showAlert("Error", "Delete failed.");
     }
   };
 
@@ -285,10 +287,10 @@ export default function Settings() {
     try {
       const res = await api.post("/settings/optimize");
       setOptimizeResult(res.data);
-      alert("SQLite database optimized (vacuumed) successfully!");
+      showAlert("Success", "SQLite database optimized (vacuumed) successfully!");
     } catch (error) {
       console.error("Failed to optimize database", error);
-      alert("Optimization failed.");
+      showAlert("Error", "Optimization failed.");
     } finally {
       setIsOptimizing(false);
     }

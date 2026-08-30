@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
+from app.core.timezone import IST
 from datetime import date, datetime, timezone, timedelta
 from app.api import deps
 from app.models.inventory import InventoryBatch, InventoryTransaction, TransactionTypeEnum
@@ -238,7 +239,7 @@ def adjust_stock(
         notes=adjust_in.notes or "Manual adjustment",
         user_id=current_user.id,
         branch_id=current_user.branch_id,
-        timestamp=datetime.now(timezone.utc)
+        timestamp=datetime.now(IST)
     )
     db.add(batch)
     db.add(txn)

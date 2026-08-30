@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, Text, Date, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
+from app.core.timezone import IST
 from datetime import datetime, timezone
 from app.database.database import Base
 from app.models.supplier import Supplier
@@ -22,7 +23,7 @@ class Purchase(Base):
     notes = Column(Text, nullable=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(IST))
 
     supplier = relationship("Supplier")
     items = relationship("PurchaseItem", back_populates="purchase")

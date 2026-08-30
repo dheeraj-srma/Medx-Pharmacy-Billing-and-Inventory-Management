@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload, selectinload
 from typing import List, Optional
+from app.core.timezone import IST
 from datetime import datetime, timezone
 from app.api import deps
 from app.models.purchase import Purchase, PurchaseItem
@@ -111,7 +112,7 @@ def create_purchase(
                 notes=f"Invoice: {purchase.invoice_number}",
                 user_id=current_user.id,
                 branch_id=current_user.branch_id,
-                timestamp=datetime.now(timezone.utc)
+                timestamp=datetime.now(IST)
             )
             db.add(transaction)
             

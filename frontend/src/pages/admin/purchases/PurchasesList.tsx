@@ -1,3 +1,4 @@
+import { useModal } from "@/providers/ModalProvider";
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useDataStore } from "../../../store/dataStore";
@@ -17,6 +18,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
 export default function PurchasesList() {
+  const { showAlert } = useModal();
   const { purchases, fetchPurchases } = useDataStore();
   const { data: purchasesData, loading } = purchases;
   const [search, setSearch] = useState("");
@@ -48,7 +50,7 @@ export default function PurchasesList() {
         })
         .catch(err => {
           console.error("Failed to load purchase details", err);
-          alert(`Failed to load inward stock details: ${err.response?.data?.detail || err.message}`);
+          showAlert("Error", `Failed to load inward stock details: ${err.response?.data?.detail || err.message}`);
           setSelectedPurchaseId(null);
         })
         .finally(() => setIsLoadingDetail(false));

@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Enum, Date
 from sqlalchemy.orm import relationship
 import enum
+from app.core.timezone import IST
 from datetime import datetime, timezone
 from app.database.database import Base
 
@@ -27,8 +28,8 @@ class InventoryBatch(Base):
     selling_price = Column(Float, default=0.0)
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(IST))
+    updated_at = Column(DateTime, default=lambda: datetime.now(IST), onupdate=lambda: datetime.now(IST))
 
     product = relationship("Product")
     branch = relationship("Branch", back_populates="batches")
@@ -46,7 +47,7 @@ class InventoryTransaction(Base):
     notes = Column(String, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
-    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    timestamp = Column(DateTime, default=lambda: datetime.now(IST))
 
     product = relationship("Product")
     batch = relationship("InventoryBatch")

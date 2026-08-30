@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { useModal } from "../../providers/ModalProvider";
 import { useDataStore } from "../../store/dataStore";
 import api from "../../services/api";
 import { 
@@ -16,6 +17,7 @@ import { Plus, Search, Edit, Trash2 } from "lucide-react";
 import { MedicineIcon } from "../../lib/medicineIcon";
 
 export default function ProductsList() {
+  const { showAlert, showConfirm } = useModal();
   const { products, fetchProducts, invalidate } = useDataStore();
   const { data: productsData, loading } = products;
   const [search, setSearch] = useState("");
@@ -33,7 +35,7 @@ export default function ProductsList() {
   );
 
   const handleDeleteProduct = async (product: any) => {
-    if (!window.confirm(`Are you sure you want to deactivate/archive "${product.name}"?`)) {
+    if (!await showConfirm("Confirm Action", `Are you sure you want to deactivate/archive "${product.name}"?`)) {
       return;
     }
 
@@ -44,7 +46,7 @@ export default function ProductsList() {
       fetchProducts(true);
     } catch (err: any) {
       console.error("Failed to delete product", err);
-      alert(err.response?.data?.detail || "Failed to delete product.");
+      showAlert("Error", err.response?.data?.detail || "Failed to delete product.");
     } finally {
       setDeletingId(null);
     }

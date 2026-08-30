@@ -1,5 +1,6 @@
 import sys
 import os
+from app.core.timezone import IST
 from datetime import datetime, date, timedelta, timezone
 import random
 
@@ -171,7 +172,7 @@ def seed_all():
             product_id=b.product_id, batch_id=b.id, quantity_change=b.quantity_available,
             transaction_type=TransactionTypeEnum.INITIAL_STOCK, reference_type="InitialStock",
             reference_id=str(b.product_id), notes="Initial stock setup", user_id=admin.id,
-            timestamp=datetime.now(timezone.utc) - timedelta(days=30)
+            timestamp=datetime.now(IST) - timedelta(days=30)
         )
         db.add(t)
     db.commit()
@@ -183,7 +184,7 @@ def seed_all():
         supplier_id=sups[0].id, invoice_number="PUR-9981", purchase_date=p_date,
         total_amount=15 * 200, tax_amount=15 * 200 * 0.12, discount_amount=0.0,
         grand_total=(15 * 200) * 1.12, notes="Bulk setup purchase", created_by=admin.id,
-        created_at=datetime.combine(p_date, datetime.min.time(), tzinfo=timezone.utc)
+        created_at=datetime.combine(p_date, datetime.min.time(), tzinfo=IST)
     )
     db.add(purch)
     db.commit()
@@ -244,8 +245,8 @@ def seed_all():
                 total_amount=total_amt, tax_amount=tax_amt, discount_amount=0.0,
                 grand_total=grand_total, payment_method=random.choice(["Cash", "UPI", "Card"]),
                 status="COMPLETED", created_by=admin.id,
-                sale_date=datetime.combine(sale_day, datetime.min.time(), tzinfo=timezone.utc) + timedelta(hours=random.randint(9, 18)),
-                created_at=datetime.combine(sale_day, datetime.min.time(), tzinfo=timezone.utc) + timedelta(hours=random.randint(9, 18))
+                sale_date=datetime.combine(sale_day, datetime.min.time(), tzinfo=IST) + timedelta(hours=random.randint(9, 18)),
+                created_at=datetime.combine(sale_day, datetime.min.time(), tzinfo=IST) + timedelta(hours=random.randint(9, 18))
             )
             db.add(sale)
             db.flush()

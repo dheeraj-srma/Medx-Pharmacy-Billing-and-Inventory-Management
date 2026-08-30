@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
+from app.core.timezone import IST
 from datetime import datetime, timezone
 from app.database.database import Base
 
@@ -9,7 +10,7 @@ class Sale(Base):
     id = Column(Integer, primary_key=True, index=True)
     invoice_number = Column(String, unique=True, index=True, nullable=False)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
-    sale_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    sale_date = Column(DateTime, default=lambda: datetime.now(IST))
     
     total_amount = Column(Float, default=0.0)
     tax_amount = Column(Float, default=0.0)
@@ -21,7 +22,7 @@ class Sale(Base):
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(IST))
 
     customer = relationship("Customer")
     items = relationship("SaleItem", back_populates="sale")

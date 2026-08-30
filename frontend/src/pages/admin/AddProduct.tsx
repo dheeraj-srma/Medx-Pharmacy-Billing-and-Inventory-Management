@@ -1,3 +1,4 @@
+import { useModal } from "@/providers/ModalProvider";
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -34,6 +35,7 @@ const productSchema = z.object({
 });
 
 export default function AddProduct() {
+  const { showAlert } = useModal();
   const { id } = useParams<{ id?: string }>();
   const isEditMode = Boolean(id);
   const navigate = useNavigate();
@@ -95,7 +97,7 @@ export default function AddProduct() {
         })
         .catch(err => {
           console.error("Failed to load product details", err);
-          alert("Failed to load product details.");
+          showAlert("Error", "Failed to load product details.");
           navigate("/admin/products");
         })
         .finally(() => {
@@ -178,7 +180,7 @@ export default function AddProduct() {
     } catch (error: any) {
       console.error("Failed to save product", error);
       const detail = error.response?.data?.detail;
-      alert(detail || `Failed to ${isEditMode ? "update" : "add"} product. Please check your inputs.`);
+      showAlert("Error", detail || `Failed to ${isEditMode ? "update" : "add"} product. Please check your inputs.`);
     } finally {
       setIsSubmitting(false);
     }

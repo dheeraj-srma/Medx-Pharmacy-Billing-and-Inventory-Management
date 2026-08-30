@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useAuthStore } from "./store/authStore";
+import { ModalProvider } from "./providers/ModalProvider";
 
 import AdminLayout from "./layouts/AdminLayout";
 import ProductsList from "./pages/admin/ProductsList";
@@ -60,9 +61,10 @@ function App() {
   }, []);
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+    <ModalProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/" element={<Navigate to="/admin" replace />} />
         
         <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
@@ -85,6 +87,7 @@ function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </ModalProvider>
   );
 }
 

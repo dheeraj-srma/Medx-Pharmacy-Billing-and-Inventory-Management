@@ -1,3 +1,4 @@
+import { useModal } from "@/providers/ModalProvider";
 import { useState, useEffect, useMemo, useRef } from "react";
 import api from "../../../services/api";
 import { useAuthStore } from "../../../store/authStore";
@@ -126,6 +127,7 @@ function matchAndRankBatch(batch: BatchItem, rawQuery: string): MatchResult | nu
 }
 
 export default function POS() {
+  const { showAlert, showConfirm } = useModal();
   const { user } = useAuthStore();
   const [selectedBranchId, setSelectedBranchId] = useState<number>(user?.branch_id || 1);
   const [activeBatches, setActiveBatches] = useState<BatchItem[]>([]);
@@ -169,7 +171,12 @@ export default function POS() {
   useEffect(() => {
     // Fetch settings for the selected branch to print correct branch info on invoice
     api.get("/settings/", { params: { branch_id: selectedBranchId } })
-      .then(res => setStoreSettings(res.data))
+      .then(res => {
+        setStoreSettings(res.data);
+        if (res.data?.default_tax_rate !== undefined) {
+          setTaxPercent(res.data.default_tax_rate);
+        }
+      })
       .catch(console.error);
   }, [selectedBranchId]);
 
@@ -177,10 +184,10 @@ export default function POS() {
     api.get("/customers/").then(res => setCustomers(res.data)).catch(console.error);
   }, []);
 
-  const handleBranchChange = (value: string) => {
+  const handleBranchChange = async (value: string) => {
     const newBranchId = parseInt(value);
     if (cart.length > 0) {
-      if (window.confirm("Changing the branch will clear your current cart. Do you want to proceed?")) {
+      if (await showConfirm("Change Branch", "Changing the branch will clear your current cart. Do you want to proceed?")) {
         setCart([]);
         setSelectedBranchId(newBranchId);
       }
@@ -294,7 +301,7 @@ export default function POS() {
           return item;
         }));
       } else {
-        alert("Cannot exceed available stock.");
+        showAlert("Stock Limit", "Cannot exceed available stock.");
       }
     } else {
       setCart([...cart, {
@@ -568,7 +575,7 @@ export default function POS() {
       
     } catch (error: any) {
       console.error("Checkout failed", error);
-      alert(error.response?.data?.detail || "Checkout failed");
+      showAlert("Error", error.response?.data?.detail || "Checkout failed");
     } finally {
       setIsSubmitting(false);
     }

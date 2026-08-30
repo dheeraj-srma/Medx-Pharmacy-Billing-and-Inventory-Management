@@ -43,11 +43,11 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center p-4 bg-slate-50">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="space-y-2 text-center pb-6">
-          <div className="mx-auto w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-2">
-            <Lock className="text-blue-600" size={24} />
+          <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-2">
+            <Lock className="text-primary" size={24} />
           </div>
           <CardTitle className="text-2xl font-bold">Staff Login</CardTitle>
           <CardDescription>
@@ -88,7 +88,7 @@ export default function Login() {
               />
             </div>
             
-            <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={isLoading}>
+            <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
