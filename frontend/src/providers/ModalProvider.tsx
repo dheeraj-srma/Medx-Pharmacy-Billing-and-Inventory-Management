@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, XCircle, AlertTriangle, Info, HelpCircle } from 'lucide-react';
 
@@ -72,11 +73,12 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   return (
     <ModalContext.Provider value={{ showAlert, showConfirm }}>
       {children}
-      {modalState && modalState.isOpen && (() => {
-        const { Icon, color, bg } = getIconAndColor();
-        return (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/60 dark:bg-black/60 backdrop-blur-sm">
-            <div className="w-full max-w-[360px] overflow-hidden rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white backdrop-blur-xl animate-in zoom-in-95 fade-in duration-200">
+      {modalState && modalState.isOpen && createPortal(
+        (() => {
+          const { Icon, color, bg } = getIconAndColor();
+          return (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/60 dark:bg-black/60 backdrop-blur-sm">
+              <div className="w-full max-w-[360px] overflow-hidden rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white backdrop-blur-xl animate-in zoom-in-95 fade-in duration-200">
               <div className="p-6">
                 <div className="flex gap-4 items-start">
                   <div className={`p-2.5 rounded-full shrink-0 ${bg}`}>
@@ -105,7 +107,7 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             </div>
           </div>
         );
-      })()}
+      })(), document.body)}
     </ModalContext.Provider>
   );
 };

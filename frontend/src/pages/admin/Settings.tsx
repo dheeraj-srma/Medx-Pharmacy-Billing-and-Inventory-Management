@@ -1,5 +1,7 @@
 import { useModal } from "@/providers/ModalProvider";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import api from "../../services/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
   Save, ShieldAlert, Sparkles, Sliders, UserPlus, Key, Edit2, 
-  Trash2, Database, RefreshCw, Download, CheckCircle2, UserX
+  Trash2, Database, RefreshCw, Download, CheckCircle2, UserX, Maximize2, X
 } from "lucide-react";
 import {
   Table,
@@ -44,6 +46,7 @@ export default function Settings() {
   // Users & Roles state
   const [users, setUsers] = useState<any[]>([]);
   const [showAddUser, setShowAddUser] = useState(false);
+  const [showExpandedUsersTable, setShowExpandedUsersTable] = useState(false);
   const [showEditUser, setShowEditUser] = useState<any | null>(null);
   const [newUser, setNewUser] = useState<any>({
     email: "",
@@ -55,7 +58,8 @@ export default function Settings() {
   const [editUserForm, setEditUserForm] = useState({
     full_name: "",
     role: "STAFF",
-    is_active: true
+    is_active: true,
+    branch_id: 1 as number | null
   });
   const [resetPassword, setResetPassword] = useState("");
   const [showResetPasswordModal, setShowResetPasswordModal] = useState<any | null>(null);
@@ -177,14 +181,19 @@ export default function Settings() {
     setEditUserForm({
       full_name: user.full_name || "",
       role: user.role,
-      is_active: user.is_active
+      is_active: user.is_active,
+      branch_id: user.branch_id || 1
     });
   };
 
   const handleSaveEditUser = async () => {
     if (!showEditUser) return;
     try {
-      await api.put(`/auth/users/${showEditUser.id}`, editUserForm);
+      const payload = { ...editUserForm };
+      if (payload.role !== "STAFF") {
+        payload.branch_id = null;
+      }
+      await api.put(`/auth/users/${showEditUser.id}`, payload);
       showAlert("Success", "User updated successfully!");
       setShowEditUser(null);
       fetchUsers();
@@ -428,7 +437,7 @@ export default function Settings() {
                       onChange={(e) => setStoreConfig({ ...storeConfig, printGstin: e.target.checked })}
                       className="sr-only peer" 
                     />
-                    <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:height-5 after:width-5 after:transition-all peer-checked:bg-indigo-600 after:h-5 after:w-5"></div>
+                    <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:height-5 after:width-5 after:transition-all peer-checked:bg-indigo-600 after:h-5 after:width-5"></div>
                   </label>
                 </div>
               </CardContent>
@@ -449,8 +458,21 @@ export default function Settings() {
                   <UserPlus size={16} /> Register Staff
                 </Button>
               </CardHeader>
-              <CardContent className="pt-6">
-                <div className="border border-slate-800 rounded-lg overflow-hidden bg-slate-950/20">
+              <CardContent className="pt-6 relative">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => setShowExpandedUsersTable(true)} 
+                      className="absolute top-2 right-4 text-slate-400 hover:text-white"
+                    >
+                      <Maximize2 size={20} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Expand Table</TooltipContent>
+                </Tooltip>
+                <div className="border border-slate-800 rounded-lg overflow-hidden bg-slate-950/20 mt-4">
                   <Table>
                     <TableHeader className="bg-slate-900/60">
                       <TableRow className="border-slate-800">
@@ -490,20 +512,40 @@ export default function Settings() {
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-2">
-                                <Button variant="ghost" size="icon" onClick={() => handleOpenEditUser(user)} className="text-slate-300 hover:text-white hover:bg-slate-800 h-8 w-8" title="Edit Staff Profile">
-                                  <Edit2 size={14} />
-                                </Button>
-                                <Button variant="ghost" size="icon" onClick={() => setShowResetPasswordModal(user)} className="text-slate-300 hover:text-white hover:bg-slate-800 h-8 w-8" title="Reset Password">
-                                  <Key size={14} />
-                                </Button>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" onClick={() => handleOpenEditUser(user)} className="text-slate-300 hover:text-white hover:bg-slate-800 h-8 w-8">
+                                      <Edit2 size={15} />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Edit Staff Profile</TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" onClick={() => setShowResetPasswordModal(user)} className="text-slate-300 hover:text-white hover:bg-slate-800 h-8 w-8">
+                                      <Key size={15} />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Reset Password</TooltipContent>
+                                </Tooltip>
                                 {user.is_active && (
-                                  <Button variant="ghost" size="icon" onClick={() => handleDeactivateUser(user.id)} className="text-rose-400 hover:text-rose-300 hover:bg-rose-950/20 h-8 w-8" title="Deactivate Account">
-                                    <Trash2 size={14} />
-                                  </Button>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button variant="ghost" size="icon" onClick={() => handleDeactivateUser(user.id)} className="text-rose-400 hover:text-rose-300 hover:bg-rose-950/20 h-8 w-8">
+                                        <Trash2 size={15} />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Deactivate Account</TooltipContent>
+                                  </Tooltip>
                                 )}
-                                <Button variant="ghost" size="icon" onClick={() => handleDeleteUser(user.id)} className="text-red-500 hover:text-red-400 hover:bg-red-950/20 h-8 w-8" title="Delete Account Permanently">
-                                  <UserX size={14} />
-                                </Button>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" onClick={() => handleDeleteUser(user.id)} className="text-red-500 hover:text-red-400 hover:bg-red-950/20 h-8 w-8">
+                                      <UserX size={15} />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Delete Account Permanently</TooltipContent>
+                                </Tooltip>
                               </div>
                             </TableCell>
                           </TableRow>
@@ -557,12 +599,22 @@ export default function Settings() {
                               <TableCell className="text-slate-300 text-sm">{new Date(b.created_at).toLocaleString()}</TableCell>
                               <TableCell className="text-right">
                                 <div className="flex justify-end gap-2">
-                                  <Button variant="ghost" size="icon" onClick={() => handleDownloadBackup(b.filename)} className="text-indigo-400 hover:text-indigo-300 hover:bg-slate-800 h-8 w-8" title="Download Backup">
-                                    <Download size={14} />
-                                  </Button>
-                                  <Button variant="ghost" size="icon" onClick={() => handleDeleteBackup(b.filename)} className="text-rose-400 hover:text-rose-300 hover:bg-rose-950/20 h-8 w-8" title="Delete Backup File">
-                                    <Trash2 size={14} />
-                                  </Button>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button variant="ghost" size="icon" onClick={() => handleDownloadBackup(b.filename)} className="text-indigo-400 hover:text-indigo-300 hover:bg-slate-800 h-8 w-8">
+                                        <Download size={16} />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Download Backup</TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button variant="ghost" size="icon" onClick={() => handleDeleteBackup(b.filename)} className="text-rose-400 hover:text-rose-300 hover:bg-rose-950/20 h-8 w-8">
+                                        <Trash2 size={16} />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Delete Backup File</TooltipContent>
+                                  </Tooltip>
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -626,8 +678,8 @@ export default function Settings() {
       </div>
 
       {/* Overlay Modal: Register Staff */}
-      {showAddUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      {showAddUser && createPortal(
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl">
             <CardHeader className="border-b border-slate-800 pb-4">
               <CardTitle className="text-white text-lg flex items-center gap-2">
@@ -715,12 +767,13 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Overlay Modal: Edit Staff Member */}
-      {showEditUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      {showEditUser && createPortal(
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl">
             <CardHeader className="border-b border-slate-800 pb-4">
               <CardTitle className="text-white text-lg flex items-center gap-2">
@@ -768,6 +821,24 @@ export default function Settings() {
                 </Select>
               </div>
 
+              {editUserForm.role === "STAFF" && (
+                <div className="space-y-2">
+                  <Label htmlFor="editBranch" className="text-slate-300">Default Branch</Label>
+                  <Select 
+                    value={editUserForm.branch_id?.toString() || "1"} 
+                    onValueChange={(v) => setEditUserForm({...editUserForm, branch_id: parseInt(v)})}
+                  >
+                    <SelectTrigger className="bg-slate-950 border-slate-800 text-white">
+                      <SelectValue placeholder="Select Branch" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-700 text-white">
+                      <SelectItem value="1">Branch 1 (Chandan Vihar)</SelectItem>
+                      <SelectItem value="2">Branch 2 (Shivpuri)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
                 <Button variant="outline" onClick={() => setShowEditUser(null)} className="bg-slate-950 border-slate-800 text-slate-300">
                   Cancel
@@ -778,12 +849,13 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Overlay Modal: Reset Password */}
-      {showResetPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      {showResetPasswordModal && createPortal(
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl">
             <CardHeader className="border-b border-slate-800 pb-4">
               <CardTitle className="text-white text-lg flex items-center gap-2">
@@ -808,7 +880,7 @@ export default function Settings() {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
-                <Button variant="outline" onClick={() => { setShowResetPasswordModal(null); setResetPassword(""); }} className="bg-slate-950 border-slate-800 text-slate-300">
+                <Button variant="outline" onClick={() => setShowResetPasswordModal(null)} className="bg-slate-950 border-slate-800 text-slate-300">
                   Cancel
                 </Button>
                 <Button onClick={handleResetPassword} className="bg-indigo-600 hover:bg-indigo-700 text-white">
@@ -817,7 +889,115 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Overlay Modal: Expanded Users Table */}
+      {showExpandedUsersTable && createPortal(
+        <div className="fixed inset-0 z-[100] flex flex-col bg-black/80 backdrop-blur-md p-6 sm:p-12 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-white">
+              Users and roles
+            </h2>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setShowExpandedUsersTable(false)} 
+              className="text-slate-300 hover:text-white hover:bg-slate-800 h-10 w-10 rounded-full bg-slate-900/50 border border-slate-800"
+            >
+              <X size={20} />
+            </Button>
+          </div>
+          
+          <div className="flex-1 overflow-auto border border-slate-800 rounded-xl bg-slate-900/90 shadow-2xl">
+            <Table>
+              <TableHeader className="bg-slate-950/80 sticky top-0 z-10 backdrop-blur-md shadow-sm">
+                <TableRow className="border-slate-800">
+                  <TableHead className="text-slate-400 font-medium py-4">Name</TableHead>
+                  <TableHead className="text-slate-400 font-medium py-4">Email</TableHead>
+                  <TableHead className="text-slate-400 font-medium py-4">Role</TableHead>
+                  <TableHead className="text-slate-400 font-medium py-4">Status</TableHead>
+                  <TableHead className="text-slate-400 font-medium py-4">Branch</TableHead>
+                  <TableHead className="text-right text-slate-400 font-medium py-4">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {users.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-slate-500 py-12">No registered staff found.</TableCell>
+                  </TableRow>
+                ) : (
+                  users.map((user) => (
+                    <TableRow key={user.id} className="border-slate-800/60 hover:bg-slate-800/40 transition-colors">
+                      <TableCell className="text-white font-medium py-4">{user.full_name || "N/A"}</TableCell>
+                      <TableCell className="text-slate-300 font-mono text-sm py-4">{user.email}</TableCell>
+                      <TableCell className="py-4">
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                          user.role === "ADMIN" 
+                            ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25" 
+                            : "bg-slate-500/10 text-slate-400 border border-slate-500/25"
+                        }`}>
+                          {user.role}
+                        </span>
+                      </TableCell>
+                      <TableCell className="py-4">
+                        <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                          user.is_active ? "text-emerald-400" : "text-rose-400"
+                        }`}>
+                          <span className={`h-2 w-2 rounded-full ${user.is_active ? "bg-emerald-400" : "bg-rose-400"} shadow-sm`} />
+                          {user.is_active ? "Active" : "Inactive"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-slate-400 text-sm py-4">
+                        {user.branch_id ? `Branch ${user.branch_id}` : "Global"}
+                      </TableCell>
+                      <TableCell className="text-right py-4">
+                        <div className="flex justify-end gap-2">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={() => handleOpenEditUser(user)} className="text-slate-300 hover:text-white hover:bg-slate-800 bg-slate-900/50 h-9 w-9">
+                                <Edit2 size={16} />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Edit Staff Profile</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={() => setShowResetPasswordModal(user)} className="text-slate-300 hover:text-white hover:bg-slate-800 bg-slate-900/50 h-9 w-9">
+                                <Key size={16} />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Reset Password</TooltipContent>
+                          </Tooltip>
+                          {user.is_active && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={() => handleDeactivateUser(user.id)} className="text-rose-400 hover:text-rose-300 hover:bg-rose-950/20 bg-slate-900/50 h-9 w-9">
+                                  <Trash2 size={16} />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Deactivate Account</TooltipContent>
+                            </Tooltip>
+                          )}
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={() => handleDeleteUser(user.id)} className="text-red-500 hover:text-red-400 hover:bg-red-950/20 bg-slate-900/50 h-9 w-9">
+                                <UserX size={16} />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Delete Account Permanently</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

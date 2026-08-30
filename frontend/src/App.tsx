@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useAuthStore } from "./store/authStore";
 import { ModalProvider } from "./providers/ModalProvider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 import AdminLayout from "./layouts/AdminLayout";
 import ProductsList from "./pages/admin/ProductsList";
@@ -61,33 +62,35 @@ function App() {
   }, []);
 
   return (
-    <ModalProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-        <Route path="/" element={<Navigate to="/admin" replace />} />
-        
-        <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
-          <Route index element={<Dashboard />} />
-          <Route path="products" element={<ProductsList />} />
-          <Route path="products/new" element={<AddProduct />} />
-          <Route path="products/edit/:id" element={<AddProduct />} />
-          <Route path="suppliers" element={<SuppliersList />} />
-          <Route path="suppliers/new" element={<AddSupplier />} />
-          <Route path="suppliers/edit/:id" element={<AddSupplier />} />
-          <Route path="purchases" element={<PurchasesList />} />
-          <Route path="purchases/new" element={<AddPurchase />} />
-          <Route path="customers" element={<CustomersList />} />
-          <Route path="sales" element={<SalesList />} />
-          <Route path="pos" element={<POS />} />
-          {/* Placeholders for future phases */}
-          <Route path="inventory" element={<InventoryList />} />
-          <Route path="reports" element={<Reports />} />
-          <Route path="settings" element={<Settings />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
-    </ModalProvider>
+    <TooltipProvider delayDuration={300}>
+      <ModalProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+          <Route path="/" element={<Navigate to="/admin" replace />} />
+          
+          <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
+            <Route index element={<Dashboard />} />
+            <Route path="products" element={<ProductsList />} />
+            <Route path="products/new" element={<AddProduct />} />
+            <Route path="products/edit/:id" element={<AddProduct />} />
+            <Route path="suppliers" element={<SuppliersList />} />
+            <Route path="suppliers/new" element={<AddSupplier />} />
+            <Route path="suppliers/edit/:id" element={<AddSupplier />} />
+            <Route path="purchases" element={<PurchasesList />} />
+            <Route path="purchases/new" element={<AddPurchase />} />
+            <Route path="customers" element={<CustomersList />} />
+            <Route path="sales" element={<SalesList />} />
+            <Route path="pos" element={<POS />} />
+            {/* Placeholders for future phases */}
+            <Route path="inventory" element={<InventoryList />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="settings" element={<Settings />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+      </ModalProvider>
+    </TooltipProvider>
   );
 }
 

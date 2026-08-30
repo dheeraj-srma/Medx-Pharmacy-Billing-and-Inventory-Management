@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Search, Sliders } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function InventoryList() {
   const { showAlert } = useModal();
@@ -287,9 +288,9 @@ export default function InventoryList() {
                         {txn.quantity_change > 0 ? `+${txn.quantity_change}` : txn.quantity_change}
                       </TableCell>
                       <TableCell className="text-sm text-slate-400">{txn.user_name || "N/A"}</TableCell>
-                      <TableCell className="text-sm text-slate-500 italic max-w-xs truncate" title={txn.notes}>
+                      <Tooltip><TooltipTrigger asChild><TableCell className="text-sm text-slate-500 italic max-w-xs truncate" >
                         {txn.notes || "None"}
-                      </TableCell>
+                      </TableCell></TooltipTrigger><TooltipContent>{txn.notes}</TooltipContent></Tooltip>
                     </TableRow>
                   ))
                 )}

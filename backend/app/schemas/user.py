@@ -28,6 +28,7 @@ class UserUpdate(BaseModel):
     full_name: str | None = None
     role: RoleEnum | None = None
     is_active: bool | None = None
+    branch_id: int | None = None
 
 class AdminPasswordReset(BaseModel):
     password: str

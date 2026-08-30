@@ -218,25 +218,29 @@ export default function AdminLayout() {
               </select>
             )}
 
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
-              className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 h-8 w-8 rounded-lg flex items-center justify-center transition-colors"
-              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
-            >
-              {theme === 'dark' ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} className="text-indigo-400" />}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+                  className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 h-8 w-8 rounded-lg flex items-center justify-center transition-colors"
+                >
+                  {theme === 'dark' ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} className="text-indigo-400" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Switch to {theme === 'dark' ? 'Light' : 'Dark'} Mode</TooltipContent>
+            </Tooltip>
 
-            <Button 
+            <Tooltip><TooltipTrigger asChild><Button 
               variant="ghost" 
               size="icon" 
               onClick={logout}
               className="text-slate-400 hover:text-red-400 hover:bg-slate-800/80 h-8 w-8 rounded-lg flex items-center justify-center transition-colors"
-              title="Log Out"
+              
             >
               <LogOut size={16} />
-            </Button>
+            </Button></TooltipTrigger><TooltipContent>Log Out</TooltipContent></Tooltip>
 
             <div className="text-sm font-medium text-slate-400 border-l border-slate-800 pl-4 h-5 flex items-center">
               {user?.full_name || user?.email || "Admin"}

@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Edit, Trash2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MedicineIcon } from "../../lib/medicineIcon";
 
 export default function ProductsList() {
@@ -140,25 +141,29 @@ export default function ProductsList() {
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Link to={`/admin/products/edit/${product.id}`}>
-                        <Button 
+                        <Tooltip><TooltipTrigger asChild><Button 
                           variant="ghost" 
                           size="icon" 
                           className="text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10"
-                          title="Edit Product"
+                          
                         >
                           <Edit size={16} />
-                        </Button>
+                        </Button></TooltipTrigger><TooltipContent>Edit Product</TooltipContent></Tooltip>
                       </Link>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        disabled={deletingId === product.id}
-                        onClick={() => handleDeleteProduct(product)}
-                        className="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10"
-                        title="Archive Product"
-                      >
-                        <Trash2 size={16} />
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            disabled={deletingId === product.id}
+                            onClick={() => handleDeleteProduct(product)}
+                            className="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10"
+                          >
+                            <Trash2 size={16} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Archive Product</TooltipContent>
+                      </Tooltip>
                     </div>
                   </TableCell>
                 </TableRow>

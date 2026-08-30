@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Edit, Building2, Phone, Mail } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function SuppliersList() {
   const { suppliers, fetchSuppliers } = useDataStore();
@@ -108,14 +109,14 @@ export default function SuppliersList() {
                   </TableCell>
                   <TableCell className="text-right">
                     <Link to={`/admin/suppliers/edit/${supplier.id}`}>
-                      <Button 
+                      <Tooltip><TooltipTrigger asChild><Button 
                         variant="ghost" 
                         size="icon" 
                         className="text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10"
-                        title="Edit Supplier"
+                        
                       >
                         <Edit size={18} />
-                      </Button>
+                      </Button></TooltipTrigger><TooltipContent>Edit Supplier</TooltipContent></Tooltip>
                     </Link>
                   </TableCell>
                 </TableRow>

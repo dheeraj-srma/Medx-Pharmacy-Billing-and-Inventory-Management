@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Plus, Search, Eye, X, Building2, Calendar, FileText, Printer, Loader2, Package } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -289,15 +290,19 @@ export default function PurchasesList() {
                     <div className="font-bold text-emerald-400 font-mono">₹{purchase.grand_total.toFixed(2)}</div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => setSelectedPurchaseId(purchase.id)}
-                      className="text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10"
-                      title="View Inward Details"
-                    >
-                      <Eye size={18} />
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => setSelectedPurchaseId(purchase.id)}
+                          className="text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10"
+                        >
+                          <Eye size={18} />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>View Inward Details</TooltipContent>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               ))
