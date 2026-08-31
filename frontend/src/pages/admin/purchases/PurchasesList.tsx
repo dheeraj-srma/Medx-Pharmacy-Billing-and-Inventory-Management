@@ -1,5 +1,6 @@
 import { useModal } from "@/providers/ModalProvider";
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { useDataStore } from "../../../store/dataStore";
 import api from "../../../services/api";
@@ -62,6 +63,17 @@ export default function PurchasesList() {
     } else {
       setPurchaseDetail(null);
     }
+  }, [selectedPurchaseId]);
+
+  useEffect(() => {
+    if (selectedPurchaseId) {
+      document.body.classList.add("modal-open");
+    } else {
+      document.body.classList.remove("modal-open");
+    }
+    return () => {
+      document.body.classList.remove("modal-open");
+    };
   }, [selectedPurchaseId]);
 
   const filteredPurchases = purchasesData.filter(p => 
@@ -319,8 +331,8 @@ export default function PurchasesList() {
       </div>
 
       {/* Inward Purchase Details Modal */}
-      {selectedPurchaseId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in">
+      {selectedPurchaseId && createPortal(
+        <div data-modal-overlay="true" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in">
           <Card className="w-full max-w-4xl max-h-[90vh] bg-slate-900 border-slate-800 shadow-2xl overflow-hidden flex flex-col">
             
             {/* Header */}
@@ -340,7 +352,7 @@ export default function PurchasesList() {
                     variant="outline" 
                     size="sm" 
                     onClick={handlePrintInwardPDF}
-                    className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white text-xs h-8"
+                    className="border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs h-8 shadow-sm"
                   >
                     <Printer className="mr-1.5" size={14} /> Print PDF
                   </Button>
@@ -349,7 +361,7 @@ export default function PurchasesList() {
                   variant="ghost" 
                   size="icon" 
                   onClick={() => setSelectedPurchaseId(null)}
-                  className="text-slate-400 hover:text-white hover:bg-slate-800 h-8 w-8"
+                  className="text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 h-8 w-8"
                 >
                   <X size={18} />
                 </Button>
@@ -484,13 +496,14 @@ export default function PurchasesList() {
               <Button 
                 variant="outline" 
                 onClick={() => setSelectedPurchaseId(null)}
-                className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+                className="border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm"
               >
                 Close
               </Button>
             </div>
           </Card>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

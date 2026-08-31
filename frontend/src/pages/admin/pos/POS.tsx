@@ -1069,17 +1069,17 @@ export default function POS() {
 
       {/* Right side: Checkout Panel */}
       <div className="col-span-4 h-full">
-        <Card className="h-full flex flex-col bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10">
-          <CardHeader className="bg-slate-900/80 text-white py-4 border-b border-slate-800">
-            <CardTitle className="text-lg">Checkout Summary</CardTitle>
+        <Card className="h-full flex flex-col bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 overflow-hidden">
+          <CardHeader className="bg-slate-900/80 text-white py-2.5 px-4 border-b border-slate-800 shrink-0">
+            <CardTitle className="text-base font-semibold">Checkout Summary</CardTitle>
           </CardHeader>
-          <CardContent className="flex-1 flex flex-col p-4 space-y-6">
+          <CardContent className="flex-1 flex flex-col p-3.5 justify-between gap-2 overflow-y-auto">
             
-            <div className="space-y-4 flex-1">
-              <div className="space-y-2">
-                <Label className="text-slate-300">Billing Branch</Label>
+            <div className="space-y-2.5">
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-slate-300">Billing Branch</Label>
                 <Select value={selectedBranchId.toString()} onValueChange={handleBranchChange}>
-                  <SelectTrigger className="bg-slate-950 border-slate-700 text-white">
+                  <SelectTrigger className="h-8 text-xs bg-slate-950 border-slate-700 text-white">
                     <SelectValue placeholder="Select Branch" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-700 text-white">
@@ -1090,10 +1090,10 @@ export default function POS() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-slate-300">Customer</Label>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-slate-300">Customer</Label>
                 <Select value={customerId} onValueChange={setCustomerId}>
-                  <SelectTrigger className="bg-slate-950 border-slate-700 text-white">
+                  <SelectTrigger className="h-8 text-xs bg-slate-950 border-slate-700 text-white">
                     <SelectValue placeholder="Select Customer" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-700 text-white">
@@ -1105,27 +1105,27 @@ export default function POS() {
                 </Select>
                 
                 {customerId === "walk-in" && (
-                  <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-800">
-                    <div className="space-y-1">
-                      <Label className="text-xs text-slate-400">Name (Optional)</Label>
+                  <div className="grid grid-cols-2 gap-2 mt-1.5 pt-1.5 border-t border-slate-800/80">
+                    <div className="space-y-0.5">
+                      <Label className="text-[11px] text-slate-400">Name (Optional)</Label>
                       <Input 
                         placeholder="Customer Name" 
                         value={walkInName}
                         onChange={(e) => setWalkInName(e.target.value)}
-                        className="h-8 text-sm bg-slate-950 border-slate-700 text-white"
+                        className="h-7 text-xs bg-slate-950 border-slate-700 text-white px-2"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-slate-400">Phone (Optional)</Label>
+                    <div className="space-y-0.5">
+                      <Label className="text-[11px] text-slate-400">Phone (Optional)</Label>
                       <Input 
                         placeholder="Phone Number" 
                         value={walkInPhone}
                         onChange={(e) => handlePhoneChange(e.target.value)}
-                        className="h-8 text-sm bg-slate-950 border-slate-700 text-white"
+                        className="h-7 text-xs bg-slate-950 border-slate-700 text-white px-2"
                       />
                     </div>
                     {matchedCustomerId && (
-                      <div className="col-span-2 text-xs text-emerald-400 font-medium mt-1">
+                      <div className="col-span-2 text-[11px] text-emerald-400 font-medium">
                         ✓ Recognized Saved Customer: {walkInName}
                       </div>
                     )}
@@ -1133,10 +1133,10 @@ export default function POS() {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-slate-300">Payment Method</Label>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-slate-300">Payment Method</Label>
                 <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                  <SelectTrigger className="bg-slate-950 border-slate-700 text-white">
+                  <SelectTrigger className="h-8 text-xs bg-slate-950 border-slate-700 text-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-700 text-white">
@@ -1148,64 +1148,66 @@ export default function POS() {
               </div>
             </div>
 
-            <div className="border-t border-slate-800 pt-4 space-y-3">
-              <div className="flex justify-between text-slate-400 text-sm">
-                <span>Subtotal ({cart.length} items)</span>
-                <span className="font-mono">₹{subtotal.toFixed(2)}</span>
-              </div>
-              
-              <div className="flex justify-between items-center text-slate-400 text-sm">
-                <div className="flex items-center gap-1">
-                  <span>Discount (</span>
-                  <input 
-                    type="number" 
-                    min="0" 
-                    max="100" 
-                    value={discountPercent || ""} 
-                    onChange={(e) => setDiscountPercent(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
-                    className="w-12 h-6 text-center bg-slate-950 border border-slate-800 rounded text-slate-200 text-xs px-1 font-mono focus:outline-none focus:border-indigo-500"
-                  />
-                  <span>%)</span>
+            <div className="space-y-2 pt-2">
+              <div className="border-t border-slate-800 pt-2 space-y-1.5 text-xs">
+                <div className="flex justify-between text-slate-400">
+                  <span>Subtotal ({cart.length} items)</span>
+                  <span className="font-mono">₹{subtotal.toFixed(2)}</span>
                 </div>
-                <span className="font-mono text-rose-450">-₹{discountAmount.toFixed(2)}</span>
-              </div>
-
-              <div className="flex justify-between items-center text-slate-400 text-sm">
-                <div className="flex items-center gap-1">
-                  <span>Tax (</span>
-                  <input 
-                    type="number" 
-                    min="0" 
-                    max="100" 
-                    value={taxPercent || ""} 
-                    onChange={(e) => setTaxPercent(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
-                    className="w-12 h-6 text-center bg-slate-950 border border-slate-800 rounded text-slate-200 text-xs px-1 font-mono focus:outline-none focus:border-indigo-500"
-                  />
-                  <span>%)</span>
+                
+                <div className="flex justify-between items-center text-slate-400">
+                  <div className="flex items-center gap-1">
+                    <span>Discount (</span>
+                    <input 
+                      type="number" 
+                      min="0" 
+                      max="100" 
+                      value={discountPercent || ""} 
+                      onChange={(e) => setDiscountPercent(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
+                      className="w-10 h-5 text-center bg-slate-950 border border-slate-800 rounded text-slate-200 text-[11px] px-1 font-mono focus:outline-none focus:border-indigo-500"
+                    />
+                    <span>%)</span>
+                  </div>
+                  <span className="font-mono text-rose-450">-₹{discountAmount.toFixed(2)}</span>
                 </div>
-                <span className="font-mono text-indigo-400">+₹{taxAmount.toFixed(2)}</span>
+
+                <div className="flex justify-between items-center text-slate-400">
+                  <div className="flex items-center gap-1">
+                    <span>Tax (</span>
+                    <input 
+                      type="number" 
+                      min="0" 
+                      max="100" 
+                      value={taxPercent || ""} 
+                      onChange={(e) => setTaxPercent(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
+                      className="w-10 h-5 text-center bg-slate-950 border border-slate-800 rounded text-slate-200 text-[11px] px-1 font-mono focus:outline-none focus:border-indigo-500"
+                    />
+                    <span>%)</span>
+                  </div>
+                  <span className="font-mono text-indigo-400">+₹{taxAmount.toFixed(2)}</span>
+                </div>
+
+                <div className="flex justify-between items-center text-slate-400">
+                  <span>Round Off</span>
+                  <span className={`font-mono ${roundOff >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                    {roundOff >= 0 ? `+₹${roundOff.toFixed(2)}` : `-₹${Math.abs(roundOff).toFixed(2)}`}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center pt-2 border-t border-dashed border-slate-700">
+                  <span className="text-base font-bold text-slate-200">Total Pay</span>
+                  <span className="text-2xl font-bold text-emerald-400 font-mono">₹{grandTotal.toFixed(2)}</span>
+                </div>
               </div>
 
-              <div className="flex justify-between items-center text-slate-400 text-sm">
-                <span>Round Off</span>
-                <span className={`font-mono ${roundOff >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                  {roundOff >= 0 ? `+₹${roundOff.toFixed(2)}` : `-₹${Math.abs(roundOff).toFixed(2)}`}
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center pt-4 border-t border-dashed border-slate-700">
-                <span className="text-xl font-bold text-slate-200">Total Pay</span>
-                <span className="text-3xl font-bold text-emerald-400 font-mono">₹{grandTotal.toFixed(2)}</span>
-              </div>
+              <Button 
+                className="w-full h-11 text-base font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/20 rounded-lg shrink-0"
+                disabled={cart.length === 0 || isSubmitting}
+                onClick={handleCheckout}
+              >
+                {isSubmitting ? "Processing..." : "Complete Checkout"}
+              </Button>
             </div>
-
-            <Button 
-              className="w-full h-14 text-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl shadow-indigo-600/20"
-              disabled={cart.length === 0 || isSubmitting}
-              onClick={handleCheckout}
-            >
-              {isSubmitting ? "Processing..." : "Complete Checkout"}
-            </Button>
           </CardContent>
         </Card>
       </div>

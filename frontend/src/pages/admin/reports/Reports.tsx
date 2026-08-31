@@ -80,17 +80,26 @@ export default function Reports() {
     inventoryLoading,
   } = reports;
 
-  // Auto-fetch on first mount (no-op if data is fresh and date range matches)
-  // Using useCallback to stabilize the reference
+  // Auto-fetch on first mount
   const triggerFetch = useCallback(() => {
     fetchSalesReport(appliedStart, appliedEnd);
     fetchPurchaseReport(appliedStart, appliedEnd);
     fetchInventoryReport();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [appliedStart, appliedEnd, fetchSalesReport, fetchPurchaseReport, fetchInventoryReport]);
 
-  // Run once on mount — Zustand will skip if data is already fresh
-  useState(() => { triggerFetch(); });
+  useEffect(() => {
+    triggerFetch();
+  }, [triggerFetch]);
+
+  useEffect(() => {
+    if (activeTab === "sales" && !salesReport && !salesLoading) {
+      fetchSalesReport(appliedStart, appliedEnd);
+    } else if (activeTab === "purchases" && !purchaseReport && !purchasesLoading) {
+      fetchPurchaseReport(appliedStart, appliedEnd);
+    } else if (activeTab === "inventory" && !inventoryReport && !inventoryLoading) {
+      fetchInventoryReport();
+    }
+  }, [activeTab, salesReport, purchaseReport, inventoryReport, salesLoading, purchasesLoading, inventoryLoading, appliedStart, appliedEnd, fetchSalesReport, fetchPurchaseReport, fetchInventoryReport]);
 
   const loading =
     activeTab === "sales" ? salesLoading :
@@ -429,8 +438,9 @@ export default function Reports() {
         <>
 
 
-          {activeTab === "sales" && salesReport && (
-            <div className="space-y-6 animate-fade-in">
+          {activeTab === "sales" && (
+            salesReport ? (
+              <div className="space-y-6 animate-fade-in">
               {/* KPI Summary Cards */}
               {(() => {
                 const pm = salesReport.payment_methods || {};
@@ -526,83 +536,97 @@ export default function Reports() {
                 </Table>
               </Card>
             </div>
-          )}
+          ) : (
+            <div className="p-20 text-center text-slate-500 flex flex-col items-center justify-center space-y-3">
+              <TrendingUp className="animate-spin text-indigo-400" size={32} />
+              <p className="text-sm font-medium">Loading sales audit records...</p>
+            </div>
+          )
+        )}
 
-          {activeTab === "purchases" && purchaseReport && (
-            <div className="space-y-6 animate-fade-in">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 border-l-4 border-l-indigo-500">
-                  <CardHeader className="pb-2">
-                    <CardDescription className="text-slate-400 flex items-center justify-between text-xs">
-                      TOTAL EXPENSES <IndianRupee size={14} className="text-indigo-400" />
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-white">₹{Number(purchaseReport.total_expense ?? 0).toFixed(2)}</div>
-                  </CardContent>
-                </Card>
+          {activeTab === "purchases" && (
+            purchaseReport ? (
+              <div className="space-y-6 animate-fade-in">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 border-l-4 border-l-indigo-500">
+                    <CardHeader className="pb-2">
+                      <CardDescription className="text-slate-400 flex items-center justify-between text-xs">
+                        TOTAL EXPENSES <IndianRupee size={14} className="text-indigo-400" />
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-white">₹{Number(purchaseReport.total_expense ?? 0).toFixed(2)}</div>
+                    </CardContent>
+                  </Card>
 
-                <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 border-l-4 border-l-emerald-500">
-                  <CardHeader className="pb-2">
-                    <CardDescription className="text-slate-400 flex items-center justify-between text-xs">
-                      TAX PAID <FileText size={14} className="text-emerald-400" />
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-white">₹{Number(purchaseReport.total_tax ?? 0).toFixed(2)}</div>
-                  </CardContent>
-                </Card>
+                  <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 border-l-4 border-l-emerald-500">
+                    <CardHeader className="pb-2">
+                      <CardDescription className="text-slate-400 flex items-center justify-between text-xs">
+                        TAX PAID <FileText size={14} className="text-emerald-400" />
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-white">₹{Number(purchaseReport.total_tax ?? 0).toFixed(2)}</div>
+                    </CardContent>
+                  </Card>
 
-                <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 border-l-4 border-l-amber-500">
-                  <CardHeader className="pb-2">
-                    <CardDescription className="text-slate-400 flex items-center justify-between text-xs">
-                      PURCHASES LOGGED <ShoppingCart size={14} className="text-amber-400" />
-                    </CardDescription>
+                  <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 border-l-4 border-l-amber-500">
+                    <CardHeader className="pb-2">
+                      <CardDescription className="text-slate-400 flex items-center justify-between text-xs">
+                        PURCHASES COUNT <ShoppingCart size={14} className="text-amber-400" />
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-white">{purchaseReport.total_purchases ?? 0}</div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Purchases Table */}
+                <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 overflow-hidden">
+                  <CardHeader className="bg-slate-900/80 border-b border-slate-800 flex flex-row items-center justify-between py-4 px-6">
+                    <div>
+                      <CardTitle className="text-white text-lg">Purchase Expense Breakdown</CardTitle>
+                      <CardDescription className="text-slate-400">Daily procurement expenses across suppliers.</CardDescription>
+                    </div>
+                    <Button onClick={exportPurchaseReportPDF} className="bg-indigo-600 hover:bg-indigo-700 text-white h-9 text-xs">
+                      <FileDown className="mr-1.5" size={14} /> Export PDF
+                    </Button>
                   </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-white">{purchaseReport.total_purchases ?? 0}</div>
-                  </CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-slate-800 hover:bg-transparent">
+                        <TableHead className="text-slate-400">Date</TableHead>
+                        <TableHead className="text-slate-400 text-center">Inward Invoices</TableHead>
+                        <TableHead className="text-slate-400 font-bold">Total Expense</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(purchaseReport.daily_summary ?? []).length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-center py-10 text-slate-500">
+                            No purchases recorded in this interval.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        (purchaseReport.daily_summary ?? []).map((day: any) => (
+                          <TableRow key={day.date} className="border-slate-800 hover:bg-slate-800/50">
+                            <TableCell className="font-medium text-slate-200">{day.date}</TableCell>
+                            <TableCell className="text-center text-slate-300">{day.purchase_count}</TableCell>
+                            <TableCell className="font-bold text-indigo-400">₹{Number(day.grand_total ?? 0).toFixed(2)}</TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
                 </Card>
               </div>
-
-              <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10 overflow-hidden">
-                <CardHeader className="bg-slate-900/80 border-b border-slate-800 flex flex-row items-center justify-between py-4 px-6">
-                  <div>
-                    <CardTitle className="text-white text-lg">Purchase Audit Records</CardTitle>
-                    <CardDescription className="text-slate-400">Daily expenses recorded during inventory inwarding.</CardDescription>
-                  </div>
-                  <Button onClick={exportPurchaseReportPDF} className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-xs">
-                    <FileDown className="mr-1.5" size={14} /> Export PDF
-                  </Button>
-                </CardHeader>
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-slate-800 hover:bg-transparent">
-                      <TableHead className="text-slate-400">Date</TableHead>
-                      <TableHead className="text-slate-400 text-center">Purchases Recorded</TableHead>
-                      <TableHead className="text-slate-400 font-bold">Grand Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(purchaseReport.daily_summary ?? []).length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={3} className="text-center py-10 text-slate-500">
-                          No purchases recorded in this interval.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      (purchaseReport.daily_summary ?? []).map((day: any) => (
-                        <TableRow key={day.date} className="border-slate-800 hover:bg-slate-800/50">
-                          <TableCell className="font-medium text-slate-200">{day.date}</TableCell>
-                          <TableCell className="text-center text-slate-300">{day.purchase_count}</TableCell>
-                          <TableCell className="font-bold text-emerald-400">₹{Number(day.grand_total ?? 0).toFixed(2)}</TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </Card>
-            </div>
+            ) : (
+              <div className="p-20 text-center text-slate-500 flex flex-col items-center justify-center space-y-3">
+                <TrendingUp className="animate-spin text-indigo-400" size={32} />
+                <p className="text-sm font-medium">Loading purchase expenses...</p>
+              </div>
+            )
           )}
 
           {activeTab === "inventory" && inventoryReport && (

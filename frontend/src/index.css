@@ -28,6 +28,19 @@
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
 
+  --color-slate-950: var(--slate-950);
+  --color-slate-900: var(--slate-900);
+  --color-slate-850: var(--slate-850);
+  --color-slate-800: var(--slate-800);
+  --color-slate-700: var(--slate-700);
+  --color-slate-600: var(--slate-600);
+  --color-slate-500: var(--slate-500);
+  --color-slate-400: var(--slate-400);
+  --color-slate-300: var(--slate-300);
+  --color-slate-200: var(--slate-200);
+  --color-slate-100: var(--slate-100);
+  --color-white: var(--text-white);
+
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -36,18 +49,18 @@
 @layer base {
   :root {
     /* Default dark theme slate color variables */
-    --color-slate-950: #020617;
-    --color-slate-900: #0f172a;
-    --color-slate-850: #1e293b;
-    --color-slate-800: #1e293b;
-    --color-slate-700: #334155;
-    --color-slate-600: #475569;
-    --color-slate-500: #64748b;
-    --color-slate-400: #94a3b8;
-    --color-slate-300: #cbd5e1;
-    --color-slate-200: #e2e8f0;
-    --color-slate-100: #f8fafc;
-    --color-white: #ffffff;
+    --slate-950: #020617;
+    --slate-900: #0f172a;
+    --slate-850: #1e293b;
+    --slate-800: #1e293b;
+    --slate-700: #334155;
+    --slate-600: #475569;
+    --slate-500: #64748b;
+    --slate-400: #94a3b8;
+    --slate-300: #cbd5e1;
+    --slate-200: #e2e8f0;
+    --slate-100: #f8fafc;
+    --text-white: #ffffff;
 
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
@@ -58,8 +71,8 @@
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
  
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
  
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
@@ -75,27 +88,28 @@
 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --ring: 239 84% 67%;
  
     --radius: 0.5rem;
   }
  
-  body.light {
+  body.light,
+  html.light {
     /* Light theme slate color variables mapping */
-    --color-slate-950: #f8fafc;
-    --color-slate-900: #ffffff;
-    --color-slate-850: #f1f5f9;
-    --color-slate-800: #cbd5e1;
-    --color-slate-700: #cbd5e1;
-    --color-slate-600: #94a3b8;
-    --color-slate-500: #64748b;
-    --color-slate-400: #475569;
-    --color-slate-300: #334155;
-    --color-slate-200: #1e293b;
-    --color-slate-100: #0f172a;
-    --color-white: #0f172a;
+    --slate-950: #f8fafc;
+    --slate-900: #ffffff;
+    --slate-850: #f1f5f9;
+    --slate-800: #e2e8f0;
+    --slate-700: #cbd5e1;
+    --slate-600: #94a3b8;
+    --slate-500: #64748b;
+    --slate-400: #475569;
+    --slate-300: #334155;
+    --slate-200: #1e293b;
+    --slate-100: #0f172a;
+    --text-white: #0f172a;
 
-    --background: 0 0% 100%;
+    --background: 210 40% 98%;
     --foreground: 222.2 84% 4.9%;
  
     --card: 0 0% 100%;
@@ -104,8 +118,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
  
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
  
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
@@ -117,11 +131,11 @@
     --accent-foreground: 222.2 47.4% 11.2%;
  
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
- 
+    --destructive-foreground: 0 0% 100%;
+
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --ring: 239 84% 67%;
   }
 }
  
@@ -134,15 +148,19 @@
   }
 }
 
-/* Sidebar and layout elements blurring when dashboard KPI detail popup is active */
+/* Sidebar and layout elements blurring when ANY modal / popup is active */
+body.modal-open aside,
+body.modal-open header,
+body.modal-open main > div:first-child,
 body.dashboard-modal-open aside,
 body.dashboard-modal-open header,
-body.dashboard-modal-open main > div:first-child {
-  filter: blur(12px);
+body.dashboard-modal-open main > div:first-child,
+body:has([data-modal-overlay="true"]) aside,
+body:has([data-modal-overlay="true"]) header {
+  filter: blur(10px);
+  pointer-events: none;
 }
 
-aside, header, main > div:first-child {
+aside, header {
   transition: filter 0.25s ease-in-out;
 }
-
-

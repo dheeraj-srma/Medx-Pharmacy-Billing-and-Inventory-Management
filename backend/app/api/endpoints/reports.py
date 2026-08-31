@@ -33,19 +33,20 @@ def get_sales_report(
             
         sales_list = sales_query.all()
         
-        total_revenue = sum(s.grand_total for s in sales_list)
-        total_tax = sum(s.tax_amount for s in sales_list)
-        total_discount = sum(s.discount_amount for s in sales_list)
+        total_revenue = float(sum((s.grand_total or 0) for s in sales_list))
+        total_tax = float(sum((s.tax_amount or 0) for s in sales_list))
+        total_discount = float(sum((s.discount_amount or 0) for s in sales_list))
         total_invoices = len(sales_list)
         
         # 2. Payment methods breakdown
         payment_methods = {"Cash": 0.0, "Card": 0.0, "UPI": 0.0}
         for s in sales_list:
             method = s.payment_method or "Cash"
+            amt = float(s.grand_total or 0)
             if method in payment_methods:
-                payment_methods[method] += s.grand_total
+                payment_methods[method] += amt
             else:
-                payment_methods[method] = s.grand_total
+                payment_methods[method] = amt
                 
         # 3. Daily Summary
         daily_summary = {}
@@ -65,10 +66,10 @@ def get_sales_report(
             s_date_str = s.sale_date.date().isoformat() if isinstance(s.sale_date, datetime) else s.sale_date.isoformat()
             if s_date_str in daily_summary:
                 daily_summary[s_date_str]["invoice_count"] += 1
-                daily_summary[s_date_str]["subtotal"] += s.total_amount
-                daily_summary[s_date_str]["tax"] += s.tax_amount
-                daily_summary[s_date_str]["discount"] += s.discount_amount
-                daily_summary[s_date_str]["grand_total"] += s.grand_total
+                daily_summary[s_date_str]["subtotal"] += float(s.total_amount or 0)
+                daily_summary[s_date_str]["tax"] += float(s.tax_amount or 0)
+                daily_summary[s_date_str]["discount"] += float(s.discount_amount or 0)
+                daily_summary[s_date_str]["grand_total"] += float(s.grand_total or 0)
                 
         daily_list = sorted(list(daily_summary.values()), key=lambda x: x["date"])
         
@@ -104,8 +105,8 @@ def get_purchases_report(
             
         purchases_list = purchases_query.all()
         
-        total_expense = sum(p.grand_total for p in purchases_list)
-        total_tax = sum(p.tax_amount for p in purchases_list)
+        total_expense = float(sum((p.grand_total or 0) for p in purchases_list))
+        total_tax = float(sum((p.tax_amount or 0) for p in purchases_list))
         total_purchases = len(purchases_list)
         
         # 2. Daily Summary
@@ -123,7 +124,7 @@ def get_purchases_report(
             p_date_str = p.purchase_date.isoformat() if isinstance(p.purchase_date, date) else str(p.purchase_date)
             if p_date_str in daily_summary:
                 daily_summary[p_date_str]["purchase_count"] += 1
-                daily_summary[p_date_str]["grand_total"] += p.grand_total
+                daily_summary[p_date_str]["grand_total"] += float(p.grand_total or 0)
                 
         daily_list = sorted(list(daily_summary.values()), key=lambda x: x["date"])
         

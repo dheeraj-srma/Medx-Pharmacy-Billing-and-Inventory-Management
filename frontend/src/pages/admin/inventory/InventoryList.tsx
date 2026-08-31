@@ -1,5 +1,6 @@
 import { useModal } from "@/providers/ModalProvider";
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import api from "../../../services/api";
 import { useDataStore } from "../../../store/dataStore";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -28,6 +29,17 @@ export default function InventoryList() {
   const [adjustmentType, setAdjustmentType] = useState("ADJUSTMENT");
   const [notes, setNotes] = useState("");
   const [isAdjusting, setIsAdjusting] = useState(false);
+
+  useEffect(() => {
+    if (selectedBatch) {
+      document.body.classList.add("modal-open");
+    } else {
+      document.body.classList.remove("modal-open");
+    }
+    return () => {
+      document.body.classList.remove("modal-open");
+    };
+  }, [selectedBatch]);
 
   // Global data store
   const { batches: batchesSlice, transactions: transactionsSlice, fetchBatches, fetchTransactions, invalidate } = useDataStore();
@@ -301,8 +313,8 @@ export default function InventoryList() {
       )}
 
       {/* Adjustment Dialog Overlay */}
-      {selectedBatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      {selectedBatch && createPortal(
+        <div data-modal-overlay="true" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in">
           <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl">
             <CardHeader className="border-b border-slate-800 pb-4">
               <CardTitle className="text-white text-lg flex items-center gap-2">
@@ -363,21 +375,22 @@ export default function InventoryList() {
                 <Button 
                   variant="outline" 
                   onClick={() => setSelectedBatch(null)}
-                  className="border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white"
+                  className="border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700"
                 >
                   Cancel
                 </Button>
                 <Button 
                   onClick={handleAdjustStock}
                   disabled={isAdjusting || !quantityChange}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-md shadow-indigo-600/20"
                 >
                   {isAdjusting ? "Saving..." : "Apply Adjustment"}
                 </Button>
               </div>
             </CardContent>
           </Card>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
