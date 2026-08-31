@@ -468,9 +468,15 @@ export default function Settings() {
                       type="checkbox" 
                       checked={storeConfig.printGstin} 
                       onChange={(e) => setStoreConfig({ ...storeConfig, printGstin: e.target.checked })}
-                      className="sr-only peer" 
+                      className="sr-only" 
                     />
-                    <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    <div className={`w-11 h-6 rounded-full transition-colors relative ${
+                      storeConfig.printGstin ? "bg-indigo-600" : "bg-slate-800"
+                    }`}>
+                      <span className={`absolute top-[2px] left-[2px] bg-slate-300 rounded-full h-5 w-5 transition-all ${
+                        storeConfig.printGstin ? "translate-x-5 bg-white" : "translate-x-0"
+                      }`} />
+                    </div>
                   </label>
                 </div>
               </CardContent>
