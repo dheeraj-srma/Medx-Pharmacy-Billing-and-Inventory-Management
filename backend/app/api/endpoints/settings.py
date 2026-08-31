@@ -51,8 +51,8 @@ def get_settings(
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
-    if current_user.role == RoleEnum.SUPERADMIN:
-        bid = branch_id or 1
+    if current_user.role in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN):
+        bid = branch_id or current_user.branch_id or 1
     else:
         bid = current_user.branch_id
     settings = get_or_create_settings(db, bid)
@@ -61,6 +61,7 @@ def get_settings(
 @router.put("/", response_model=StoreSettingsResponse)
 def update_settings(
     settings_in: StoreSettingsUpdate,
+    branch_id: Optional[int] = None,
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
@@ -69,7 +70,10 @@ def update_settings(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Superadmin has read-only access and cannot update settings."
         )
-    bid = current_user.branch_id
+    if current_user.role == RoleEnum.ADMIN:
+        bid = branch_id or current_user.branch_id or 1
+    else:
+        bid = current_user.branch_id
     settings = get_or_create_settings(db, bid)
     
     update_data = settings_in.model_dump(exclude_unset=True)

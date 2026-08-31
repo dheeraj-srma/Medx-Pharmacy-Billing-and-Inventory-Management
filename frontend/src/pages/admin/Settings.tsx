@@ -3,6 +3,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import api from "../../services/api";
+import { useAuthStore } from "../../store/authStore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,9 +30,17 @@ import {
 
 export default function Settings() {
   const { showAlert, showConfirm } = useModal();
+  const { user } = useAuthStore();
+  const [selectedSettingsBranchId, setSelectedSettingsBranchId] = useState<number>(1);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("store_profile");
+
+  useEffect(() => {
+    if (user?.branch_id) {
+      setSelectedSettingsBranchId(user.branch_id);
+    }
+  }, [user]);
 
   const [storeConfig, setStoreConfig] = useState({
     storeName: "",
@@ -70,9 +79,10 @@ export default function Settings() {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizeResult, setOptimizeResult] = useState<any | null>(null);
 
-  const fetchSettings = async () => {
+  const fetchSettings = async (branchId?: number) => {
     try {
-      const res = await api.get("/settings/");
+      const bid = branchId ?? selectedSettingsBranchId;
+      const res = await api.get("/settings/", { params: { branch_id: bid } });
       setStoreConfig({
         storeName: res.data.store_name || "",
         phone: res.data.phone || "",
@@ -109,7 +119,7 @@ export default function Settings() {
     const init = async () => {
       setIsLoading(true);
       await Promise.all([
-        fetchSettings(),
+        fetchSettings(selectedSettingsBranchId),
         fetchUsers(),
         fetchBackups()
       ]);
@@ -117,6 +127,12 @@ export default function Settings() {
     };
     init();
   }, []);
+
+  useEffect(() => {
+    if (!isLoading) {
+      fetchSettings(selectedSettingsBranchId);
+    }
+  }, [selectedSettingsBranchId]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setStoreConfig({ ...storeConfig, [e.target.name]: e.target.value });
@@ -135,7 +151,7 @@ export default function Settings() {
         print_gstin: storeConfig.printGstin,
       };
 
-      const res = await api.put("/settings/", payload);
+      const res = await api.put(`/settings/?branch_id=${selectedSettingsBranchId}`, payload);
       setStoreConfig({
         storeName: res.data.store_name || "",
         phone: res.data.phone || "",
@@ -372,6 +388,23 @@ export default function Settings() {
 
         {/* Content */}
         <div className="md:col-span-2 space-y-6">
+          {(user?.role === "admin" || user?.role === "superadmin") && (activeTab === "store_profile" || activeTab === "tax_billing") && (
+            <div className="flex items-center justify-between bg-slate-900/40 border border-slate-800/80 p-4 rounded-xl backdrop-blur-sm shadow-xl shadow-black/10">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-200">Active Branch Profile</h3>
+                <p className="text-xs text-slate-400">Select which branch profile to view and modify.</p>
+              </div>
+              <select
+                value={selectedSettingsBranchId}
+                onChange={(e) => setSelectedSettingsBranchId(Number(e.target.value))}
+                className="bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none w-48 transition-all hover:border-slate-700 cursor-pointer"
+              >
+                <option value={1}>Branch 1 (Chandan Vihar)</option>
+                <option value={2}>Branch 2 (Shivpuri)</option>
+              </select>
+            </div>
+          )}
+
           {activeTab === "store_profile" && (
             <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10">
               <CardHeader>
