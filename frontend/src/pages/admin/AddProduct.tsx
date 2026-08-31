@@ -12,7 +12,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Save, Upload, Loader2, Package } from "lucide-react";
+import { ArrowLeft, Save, Upload, Loader2, Package, AlertTriangle, CheckCircle2 } from "lucide-react";
+
+/** A single field-level data integrity issue returned from the API */
+interface FieldIssue {
+  field: string;
+  severity: "MISSING" | "WARNING" | "ERROR" | "NORMALIZED" | "VALID";
+  message: string;
+}
 
 const productSchema = z.object({
   name: z.string().min(1, "Product name is required"),
@@ -46,6 +53,8 @@ export default function AddProduct() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingProduct, setIsLoadingProduct] = useState(isEditMode);
+  const [diIssues, setDiIssues] = useState<FieldIssue[]>([]); // data integrity warnings from API
+  const [savedWithWarnings, setSavedWithWarnings] = useState(false);
 
   const { register, handleSubmit, formState: { errors }, setValue, watch, reset } = useForm<any>({
     resolver: zodResolver(productSchema),
@@ -119,6 +128,8 @@ export default function AddProduct() {
   const onSubmit = async (data: any) => {
     try {
       setIsSubmitting(true);
+      setDiIssues([]);
+      setSavedWithWarnings(false);
 
       if (isEditMode && id) {
         // --- UPDATE EXISTING PRODUCT ---
@@ -139,7 +150,13 @@ export default function AddProduct() {
           is_active: data.is_active,
         };
 
-        await api.put(`/products/${id}`, updatePayload);
+        const res = await api.put(`/products/${id}`, updatePayload);
+
+        // Check for data integrity issues in response
+        if (res.data?.data_integrity?.issues?.length) {
+          setDiIssues(res.data.data_integrity.issues);
+          setSavedWithWarnings(true);
+        }
 
         // Upload new image if chosen
         if (imageFile) {
@@ -151,7 +168,9 @@ export default function AddProduct() {
         }
 
         invalidate('products');
-        navigate("/admin/products");
+        if (!res.data?.data_integrity?.is_incomplete) {
+          navigate("/admin/products");
+        }
       } else {
         // --- CREATE NEW PRODUCT ---
         const formData = new FormData();
@@ -164,23 +183,40 @@ export default function AddProduct() {
         if (imageFile) {
           formData.append("image", imageFile);
         }
+        // Note: batch_number is intentionally NOT auto-generated here.
+        // If missing, the backend validation pipeline will assign a safe placeholder
+        // and log a data integrity issue for the admin to resolve.
 
-        if (data.initial_stock && data.initial_stock > 0 && data.expiry_date) {
-          formData.append("batch_number", `BATCH-${Date.now()}`);
-        }
-
-        await api.post("/products/", formData, {
+        const res = await api.post("/products/", formData, {
           headers: { "Content-Type": "multipart/form-data" }
         });
 
+        // Check for data integrity issues in response
+        if (res.data?.data_integrity?.issues?.length) {
+          setDiIssues(res.data.data_integrity.issues);
+          setSavedWithWarnings(true);
+        }
+
         invalidate('products');
         invalidate('batches');
-        navigate("/admin/products");
+        if (!res.data?.data_integrity?.is_incomplete) {
+          navigate("/admin/products");
+        }
       }
     } catch (error: any) {
       console.error("Failed to save product", error);
       const detail = error.response?.data?.detail;
-      showAlert("Error", detail || `Failed to ${isEditMode ? "update" : "add"} product. Please check your inputs.`);
+      // Handle structured validation errors from the data integrity layer
+      if (typeof detail === "object" && detail?.error?.fields) {
+        const fieldErrors: FieldIssue[] = Object.entries(detail.error.fields).map(
+          ([field, message]) => ({ field, severity: "ERROR" as const, message: message as string })
+        );
+        setDiIssues(fieldErrors);
+        showAlert("Validation Error", detail.error.message || "Please fix the errors highlighted below.");
+      } else {
+        const msg = typeof detail === "string" ? detail : JSON.stringify(detail);
+        showAlert("Error", msg || `Failed to ${isEditMode ? "update" : "add"} product. Please check your inputs.`);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -216,6 +252,51 @@ export default function AddProduct() {
           </div>
         </div>
       </div>
+
+      {/* Data Integrity Issues Banner */}
+      {diIssues.length > 0 && (
+        <div className="space-y-2">
+          {savedWithWarnings && (
+            <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 backdrop-blur-sm">
+              <AlertTriangle size={18} className="text-amber-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-amber-300">Product saved with missing information</p>
+                <p className="text-xs text-amber-400/80 mt-0.5">
+                  Some fields had missing values — placeholder data has been stored temporarily.
+                  Fill in the correct values and save again to resolve these issues.
+                </p>
+              </div>
+            </div>
+          )}
+          <div className="rounded-xl border border-slate-700 bg-slate-900/60 divide-y divide-slate-800">
+            {diIssues.map((issue, idx) => (
+              <div key={idx} className="flex items-start gap-3 p-3">
+                <AlertTriangle size={14} className={`mt-0.5 flex-shrink-0 ${
+                  issue.severity === "ERROR" ? "text-rose-400" :
+                  issue.severity === "MISSING" ? "text-amber-400" :
+                  "text-yellow-400"
+                }`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-slate-300 capitalize">{issue.field.replace(/_/g, " ")}</p>
+                  <p className="text-xs text-slate-400">{issue.message}</p>
+                </div>
+                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded flex-shrink-0 ${
+                  issue.severity === "ERROR" ? "bg-rose-500/20 text-rose-300" :
+                  issue.severity === "MISSING" ? "bg-amber-500/20 text-amber-300" :
+                  "bg-yellow-500/20 text-yellow-300"
+                }`}>{issue.severity}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {savedWithWarnings && diIssues.length === 0 && (
+        <div className="flex items-center gap-3 p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10">
+          <CheckCircle2 size={18} className="text-emerald-400" />
+          <p className="text-sm text-emerald-300 font-medium">All issues resolved. You can now navigate away.</p>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

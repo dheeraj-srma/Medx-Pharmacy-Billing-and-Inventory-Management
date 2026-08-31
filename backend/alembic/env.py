@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.database.database import Base
 from app.models import user, product, inventory, supplier, purchase, customer, sale
 from app.models.settings import StoreSettings
+from app.models.data_integrity import DataIntegrityIssue  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

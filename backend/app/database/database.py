@@ -22,6 +22,7 @@ from app.models.purchase import Purchase, PurchaseItem
 from app.models.sale import Sale, SaleItem
 from app.models.settings import StoreSettings
 from app.models.supplier import Supplier
+from app.models.data_integrity import DataIntegrityIssue  # noqa: F401
 
 def get_db():
     db = SessionLocal()

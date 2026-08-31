@@ -48,6 +48,7 @@ class ProductCreate(ProductBase):
 class ProductResponse(ProductBase):
     id: int
     category: Optional[CategoryResponse] = None
+    data_integrity: Optional[dict] = None  # EntityDataIntegrity when issues exist
 
     class Config:
         from_attributes = True

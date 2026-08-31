@@ -19,6 +19,7 @@ import Settings from "./pages/admin/Settings";
 import InventoryList from "./pages/admin/inventory/InventoryList";
 import Reports from "./pages/admin/reports/Reports";
 import Login from "./pages/Login";
+import DataIssues from "./pages/admin/DataIssues";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore();
@@ -86,6 +87,7 @@ function App() {
             <Route path="inventory" element={<InventoryList />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="data-issues" element={<DataIssues />} />
           </Route>
         </Routes>
       </BrowserRouter>

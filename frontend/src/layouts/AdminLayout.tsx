@@ -19,7 +19,8 @@ import {
   UserCheck,
   Sun,
   Moon,
-  LogOut
+  LogOut,
+  ShieldCheck
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -110,6 +111,7 @@ export default function AdminLayout() {
     { name: "Sales History", path: "/admin/sales", icon: Receipt },
     { name: "Customers", path: "/admin/customers", icon: UserCheck },
     { name: "Reports", path: "/admin/reports", icon: BarChart },
+    { name: "Data Issues", path: "/admin/data-issues", icon: ShieldCheck },
     { name: "Settings", path: "/admin/settings", icon: Settings },
   ];
 
