@@ -152,6 +152,18 @@ api.interceptors.response.use(
   },
   (error) => {
     updateNetworkStatus(-1);
+    if (error.response?.status === 401) {
+      const requestUrl = error.config?.url || "";
+      // Only clear and redirect if it wasn't a failed login attempt
+      if (!requestUrl.includes("/auth/login")) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        cacheStore.invalidate("");
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login";
+        }
+      }
+    }
     return Promise.reject(error);
   }
 );

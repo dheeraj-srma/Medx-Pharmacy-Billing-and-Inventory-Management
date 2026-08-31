@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import api from "../../services/api";
 import { useAuthStore } from "../../store/authStore";
+import { useDataStore } from "../../store/dataStore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,10 +32,15 @@ import {
 export default function Settings() {
   const { showAlert, showConfirm } = useModal();
   const { user } = useAuthStore();
+  const { branches, fetchBranches } = useDataStore();
   const [selectedSettingsBranchId, setSelectedSettingsBranchId] = useState<number>(1);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("store_profile");
+
+  useEffect(() => {
+    fetchBranches();
+  }, [fetchBranches]);
 
   useEffect(() => {
     if (user?.branch_id) {
@@ -399,8 +405,9 @@ export default function Settings() {
                 onChange={(e) => setSelectedSettingsBranchId(Number(e.target.value))}
                 className="bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none w-48 transition-all hover:border-slate-700 cursor-pointer"
               >
-                <option value={1}>Branch 1 (Chandan Vihar)</option>
-                <option value={2}>Branch 2 (Shivpuri)</option>
+                {branches.map((b: any) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
               </select>
             </div>
           )}
@@ -789,8 +796,9 @@ export default function Settings() {
                       <SelectValue placeholder="Select Branch" />
                     </SelectTrigger>
                     <SelectContent className="bg-slate-900 border-slate-700 text-white">
-                      <SelectItem value="1">Branch 1 (Chandan Vihar)</SelectItem>
-                      <SelectItem value="2">Branch 2 (Shivpuri)</SelectItem>
+                      {branches.map((b: any) => (
+                        <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -871,8 +879,9 @@ export default function Settings() {
                       <SelectValue placeholder="Select Branch" />
                     </SelectTrigger>
                     <SelectContent className="bg-slate-900 border-slate-700 text-white">
-                      <SelectItem value="1">Branch 1 (Chandan Vihar)</SelectItem>
-                      <SelectItem value="2">Branch 2 (Shivpuri)</SelectItem>
+                      {branches.map((b: any) => (
+                        <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

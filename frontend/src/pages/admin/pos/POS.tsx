@@ -2,6 +2,7 @@ import { useModal } from "@/providers/ModalProvider";
 import { useState, useEffect, useMemo, useRef } from "react";
 import api from "../../../services/api";
 import { useAuthStore } from "../../../store/authStore";
+import { useDataStore } from "../../../store/dataStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -129,6 +130,7 @@ function matchAndRankBatch(batch: BatchItem, rawQuery: string): MatchResult | nu
 export default function POS() {
   const { showAlert, showConfirm } = useModal();
   const { user } = useAuthStore();
+  const { branches, fetchBranches } = useDataStore();
   const [selectedBranchId, setSelectedBranchId] = useState<number>(user?.branch_id || 1);
   const [activeBatches, setActiveBatches] = useState<BatchItem[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
@@ -139,6 +141,10 @@ export default function POS() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    fetchBranches();
+  }, [fetchBranches]);
   
   // Sale states
   const [customerId, setCustomerId] = useState<string>("walk-in");
@@ -465,7 +471,9 @@ export default function POS() {
   const discountAmount = subtotal * (discountPercent / 100);
   const taxableAmount = subtotal - discountAmount;
   const taxAmount = taxableAmount * (taxPercent / 100);
-  const grandTotal = taxableAmount + taxAmount;
+  const rawGrandTotal = Math.max(0, taxableAmount + taxAmount);
+  const grandTotal = Math.round(rawGrandTotal);
+  const roundOff = grandTotal - rawGrandTotal;
 
   const handlePhoneChange = (val: string) => {
     let cleaned = val.replace(/[^\d+]/g, "");
@@ -533,6 +541,7 @@ export default function POS() {
         total_amount: subtotal,
         tax_amount: taxAmount,
         discount_amount: discountAmount,
+        round_off: roundOff,
         grand_total: grandTotal,
         payment_method: paymentMethod,
         branch_id: selectedBranchId,
@@ -549,17 +558,25 @@ export default function POS() {
       const res = await api.post("/sales/", payload);
 
       setPrintSnapshot({
-        cart: [...cart],
-        subtotal,
+        cart: res.data.items && res.data.items.length > 0 ? res.data.items.map((it: any) => ({
+          product_name: it.product_name || cart.find(c => c.product_id === it.product_id)?.product_name || "Medicine",
+          batch_number: it.batch_number || cart.find(c => c.batch_id === it.batch_id)?.batch_number || "-",
+          quantity: it.quantity,
+          unit_price: Number(it.unit_price),
+          discount: Number(it.discount),
+          total_price: Number(it.total_price)
+        })) : [...cart],
+        subtotal: Number(res.data.total_amount ?? subtotal),
         discountPercent,
-        discountAmount,
+        discountAmount: Number(res.data.discount_amount ?? discountAmount),
         taxPercent,
-        taxAmount,
-        grandTotal,
+        taxAmount: Number(res.data.tax_amount ?? taxAmount),
+        roundOff: Number(res.data.round_off ?? roundOff),
+        grandTotal: Number(res.data.grand_total ?? grandTotal),
         customerName: custName,
         customerPhone: custPhone,
         invoiceNumber: res.data.invoice_number,
-        date: new Date().toLocaleString()
+        date: new Date(res.data.sale_date || res.data.created_at || Date.now()).toLocaleString()
       });
 
       setCompletedSale(res.data);
@@ -731,29 +748,34 @@ export default function POS() {
     
     // Row 1: Subtotal
     doc.text("Subtotal:", 124, finalY + 7);
-    doc.text(`Rs. ${printSnapshot.subtotal.toFixed(2)}`, 192, finalY + 7, { align: "right" });
+    doc.text(`Rs. ${Number(printSnapshot.subtotal ?? 0).toFixed(2)}`, 192, finalY + 7, { align: "right" });
     
     // Row 2: Discount
     doc.text(`Discount (${printSnapshot.discountPercent}%):`, 124, finalY + 14);
-    doc.text(`-Rs. ${printSnapshot.discountAmount.toFixed(2)}`, 192, finalY + 14, { align: "right" });
+    doc.text(`-Rs. ${Number(printSnapshot.discountAmount ?? 0).toFixed(2)}`, 192, finalY + 14, { align: "right" });
     
     // Row 3: Tax
     doc.text(`Tax (${printSnapshot.taxPercent}%):`, 124, finalY + 21);
-    doc.text(`+Rs. ${printSnapshot.taxAmount.toFixed(2)}`, 192, finalY + 21, { align: "right" });
+    doc.text(`+Rs. ${Number(printSnapshot.taxAmount ?? 0).toFixed(2)}`, 192, finalY + 21, { align: "right" });
+
+    // Row 4: Round Off
+    const roundOffVal = Number(printSnapshot.roundOff ?? 0);
+    doc.text("Round Off:", 124, finalY + 28);
+    doc.text(`${roundOffVal >= 0 ? "+Rs. " : "-Rs. "}${Math.abs(roundOffVal).toFixed(2)}`, 192, finalY + 28, { align: "right" });
     
     // Draw a divider line
     doc.setDrawColor(230, 231, 238);
-    doc.line(124, finalY + 24, 192, finalY + 24);
+    doc.line(124, finalY + 31, 192, finalY + 31);
     
-    // Row 4: Total Pay
+    // Row 5: Total Pay
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10.5);
     doc.setTextColor(67, 56, 202);
-    doc.text("Total Pay:", 124, finalY + 29);
-    doc.text(`Rs. ${printSnapshot.grandTotal.toFixed(2)}`, 192, finalY + 29, { align: "right" });
+    doc.text("Total Pay:", 124, finalY + 36);
+    doc.text(`Rs. ${Number(printSnapshot.grandTotal ?? 0).toFixed(2)}`, 192, finalY + 36, { align: "right" });
     
     doc.setDrawColor(230, 231, 238);
-    doc.line(14, finalY + 38, 196, finalY + 38);
+    doc.line(14, finalY + 45, 196, finalY + 45);
     
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
@@ -1061,8 +1083,9 @@ export default function POS() {
                     <SelectValue placeholder="Select Branch" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-700 text-white">
-                    <SelectItem value="1">Branch 1 (Chandan Vihar)</SelectItem>
-                    <SelectItem value="2">Branch 2 (Shivpuri)</SelectItem>
+                    {branches.map((b: any) => (
+                      <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -1161,6 +1184,13 @@ export default function POS() {
                   <span>%)</span>
                 </div>
                 <span className="font-mono text-indigo-400">+₹{taxAmount.toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between items-center text-slate-400 text-sm">
+                <span>Round Off</span>
+                <span className={`font-mono ${roundOff >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                  {roundOff >= 0 ? `+₹${roundOff.toFixed(2)}` : `-₹${Math.abs(roundOff).toFixed(2)}`}
+                </span>
               </div>
 
               <div className="flex justify-between items-center pt-4 border-t border-dashed border-slate-700">

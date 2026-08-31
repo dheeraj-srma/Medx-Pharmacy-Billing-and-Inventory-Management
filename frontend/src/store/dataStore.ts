@@ -80,6 +80,9 @@ interface DataStoreState {
   fetchPurchaseReport: (startDate: string, endDate: string, force?: boolean) => Promise<void>;
   fetchInventoryReport: (force?: boolean) => Promise<void>;
 
+  branches: any[];
+  fetchBranches: (force?: boolean) => Promise<void>;
+
   selectedBranchId: number | undefined;
   setSelectedBranchId: (id: number | undefined) => void;
 
@@ -374,6 +377,17 @@ export const useDataStore = create<DataStoreState>((set, get) => {
         set((s) => ({
           dashboard: { ...s.dashboard, loading: false, syncing: false },
         }));
+      }
+    },
+
+    branches: [],
+    fetchBranches: async (force = false) => {
+      if (get().branches.length > 0 && !force) return;
+      try {
+        const res = await api.get('/branches/');
+        set({ branches: res.data });
+      } catch (err) {
+        console.error('[dataStore] Failed to fetch branches', err);
       }
     },
 

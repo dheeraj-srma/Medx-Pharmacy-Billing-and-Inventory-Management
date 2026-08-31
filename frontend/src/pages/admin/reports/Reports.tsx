@@ -186,24 +186,24 @@ export default function Reports() {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9.5);
     doc.setTextColor(30, 41, 59); // slate-800
-    doc.text(`Total Revenue: Rs ${(salesReport.total_revenue ?? 0).toFixed(2)}`, 18, 64);
-    doc.text(`Total Tax Collected: Rs ${(salesReport.total_tax ?? 0).toFixed(2)}`, 18, 71);
+    doc.text(`Total Revenue: Rs ${Number(salesReport.total_revenue ?? 0).toFixed(2)}`, 18, 64);
+    doc.text(`Total Tax Collected: Rs ${Number(salesReport.total_tax ?? 0).toFixed(2)}`, 18, 71);
     doc.text(`Total Invoices: ${salesReport.total_invoices ?? 0}`, 18, 78);
 
     doc.text("Payment Breakdown:", 120, 64);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
-    doc.text(`- Cash: Rs ${(pm.Cash ?? 0).toFixed(2)}`, 120, 70);
-    doc.text(`- UPI: Rs ${(pm.UPI ?? 0).toFixed(2)}`, 120, 75);
-    doc.text(`- Card: Rs ${(pm.Card ?? 0).toFixed(2)}`, 120, 80);
+    doc.text(`- Cash: Rs ${Number(pm.Cash ?? 0).toFixed(2)}`, 120, 70);
+    doc.text(`- UPI: Rs ${Number(pm.UPI ?? 0).toFixed(2)}`, 120, 75);
+    doc.text(`- Card: Rs ${Number(pm.Card ?? 0).toFixed(2)}`, 120, 80);
 
     const headers = [["Date", "Invoices", "Subtotal", "Tax Collected", "Grand Total"]];
     const rows = salesReport.daily_summary.map((day: any) => [
       day.date,
       day.invoice_count,
-      `Rs ${day.subtotal.toFixed(2)}`,
-      `Rs ${day.tax.toFixed(2)}`,
-      `Rs ${day.grand_total.toFixed(2)}`
+      `Rs ${Number(day.subtotal ?? 0).toFixed(2)}`,
+      `Rs ${Number(day.tax ?? 0).toFixed(2)}`,
+      `Rs ${Number(day.grand_total ?? 0).toFixed(2)}`
     ]);
 
     autoTable(doc, {
@@ -240,15 +240,15 @@ export default function Reports() {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9.5);
     doc.setTextColor(30, 41, 59); // slate-800
-    doc.text(`Total Expenses: Rs ${purchaseReport.total_expense.toFixed(2)}`, 18, 64);
+    doc.text(`Total Expenses: Rs ${Number(purchaseReport.total_expense ?? 0).toFixed(2)}`, 18, 64);
     doc.text(`Total Purchases: ${purchaseReport.total_purchases}`, 18, 71);
-    doc.text(`Total Tax Paid: Rs ${purchaseReport.total_tax.toFixed(2)}`, 120, 64);
+    doc.text(`Total Tax Paid: Rs ${Number(purchaseReport.total_tax ?? 0).toFixed(2)}`, 120, 64);
 
     const headers = [["Date", "Purchases Count", "Grand Total"]];
     const rows = purchaseReport.daily_summary.map((day: any) => [
       day.date,
       day.purchase_count,
-      `Rs ${day.grand_total.toFixed(2)}`
+      `Rs ${Number(day.grand_total ?? 0).toFixed(2)}`
     ]);
 
     autoTable(doc, {
@@ -291,9 +291,9 @@ export default function Reports() {
     doc.text("Valuation Summary:", 120, 64);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
-    doc.text(`- Cost Price: Rs ${inventoryReport.valuation_purchase.toFixed(2)}`, 120, 70);
-    doc.text(`- Selling Price: Rs ${inventoryReport.valuation_selling.toFixed(2)}`, 120, 75);
-    doc.text(`- MRP Price: Rs ${inventoryReport.valuation_mrp.toFixed(2)}`, 120, 80);
+    doc.text(`- Cost Price: Rs ${Number(inventoryReport.valuation_purchase ?? 0).toFixed(2)}`, 120, 70);
+    doc.text(`- Selling Price: Rs ${Number(inventoryReport.valuation_selling ?? 0).toFixed(2)}`, 120, 75);
+    doc.text(`- MRP Price: Rs ${Number(inventoryReport.valuation_mrp ?? 0).toFixed(2)}`, 120, 80);
 
     // Low Stock Table
     doc.setFont("helvetica", "bold");
@@ -443,7 +443,7 @@ export default function Reports() {
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold text-white">₹{(salesReport.total_revenue ?? 0).toFixed(2)}</div>
+                        <div className="text-2xl font-bold text-white">₹{Number(salesReport.total_revenue ?? 0).toFixed(2)}</div>
                       </CardContent>
                     </Card>
 
@@ -454,7 +454,7 @@ export default function Reports() {
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold text-white">₹{(salesReport.total_tax ?? 0).toFixed(2)}</div>
+                        <div className="text-2xl font-bold text-white">₹{Number(salesReport.total_tax ?? 0).toFixed(2)}</div>
                       </CardContent>
                     </Card>
 
@@ -473,9 +473,9 @@ export default function Reports() {
                       <div className="px-6 py-4 flex-1">
                         <div className="text-xs font-semibold text-slate-400 mb-2">PAYMENT BREAKDOWN</div>
                         <div className="text-xs space-y-1 text-slate-300">
-                          <div className="flex justify-between"><span>Cash:</span><span className="font-semibold">₹{(pm.Cash ?? 0).toFixed(2)}</span></div>
-                          <div className="flex justify-between"><span>UPI:</span><span className="font-semibold">₹{(pm.UPI ?? 0).toFixed(2)}</span></div>
-                          <div className="flex justify-between"><span>Card:</span><span className="font-semibold">₹{(pm.Card ?? 0).toFixed(2)}</span></div>
+                          <div className="flex justify-between"><span>Cash:</span><span className="font-semibold">₹{Number(pm.Cash ?? 0).toFixed(2)}</span></div>
+                          <div className="flex justify-between"><span>UPI:</span><span className="font-semibold">₹{Number(pm.UPI ?? 0).toFixed(2)}</span></div>
+                          <div className="flex justify-between"><span>Card:</span><span className="font-semibold">₹{Number(pm.Card ?? 0).toFixed(2)}</span></div>
                         </div>
                       </div>
                     </Card>
@@ -516,9 +516,9 @@ export default function Reports() {
                         <TableRow key={day.date} className="border-slate-800 hover:bg-slate-800/50">
                           <TableCell className="font-medium text-slate-200">{day.date}</TableCell>
                           <TableCell className="text-center text-slate-300">{day.invoice_count}</TableCell>
-                          <TableCell className="text-slate-300">₹{(day.subtotal ?? 0).toFixed(2)}</TableCell>
-                          <TableCell className="text-slate-300">₹{(day.tax ?? 0).toFixed(2)}</TableCell>
-                          <TableCell className="font-bold text-emerald-400">₹{(day.grand_total ?? 0).toFixed(2)}</TableCell>
+                          <TableCell className="text-slate-300">₹{Number(day.subtotal ?? 0).toFixed(2)}</TableCell>
+                          <TableCell className="text-slate-300">₹{Number(day.tax ?? 0).toFixed(2)}</TableCell>
+                          <TableCell className="font-bold text-emerald-400">₹{Number(day.grand_total ?? 0).toFixed(2)}</TableCell>
                         </TableRow>
                       ))
                     )}
@@ -538,7 +538,7 @@ export default function Reports() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-white">₹{(purchaseReport.total_expense ?? 0).toFixed(2)}</div>
+                    <div className="text-2xl font-bold text-white">₹{Number(purchaseReport.total_expense ?? 0).toFixed(2)}</div>
                   </CardContent>
                 </Card>
 
@@ -549,7 +549,7 @@ export default function Reports() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-white">₹{(purchaseReport.total_tax ?? 0).toFixed(2)}</div>
+                    <div className="text-2xl font-bold text-white">₹{Number(purchaseReport.total_tax ?? 0).toFixed(2)}</div>
                   </CardContent>
                 </Card>
 
@@ -595,7 +595,7 @@ export default function Reports() {
                         <TableRow key={day.date} className="border-slate-800 hover:bg-slate-800/50">
                           <TableCell className="font-medium text-slate-200">{day.date}</TableCell>
                           <TableCell className="text-center text-slate-300">{day.purchase_count}</TableCell>
-                          <TableCell className="font-bold text-emerald-400">₹{(day.grand_total ?? 0).toFixed(2)}</TableCell>
+                          <TableCell className="font-bold text-emerald-400">₹{Number(day.grand_total ?? 0).toFixed(2)}</TableCell>
                         </TableRow>
                       ))
                     )}
@@ -628,8 +628,8 @@ export default function Reports() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-white">₹{(inventoryReport.valuation_purchase ?? 0).toFixed(2)}</div>
-                    <p className="text-xs text-emerald-500 font-medium mt-1">Selling Value: ₹{(inventoryReport.valuation_selling ?? 0).toFixed(2)}</p>
+                    <div className="text-2xl font-bold text-white">₹{Number(inventoryReport.valuation_purchase ?? 0).toFixed(2)}</div>
+                    <p className="text-xs text-emerald-500 font-medium mt-1">Selling Value: ₹{Number(inventoryReport.valuation_selling ?? 0).toFixed(2)}</p>
                   </CardContent>
                 </Card>
 
@@ -641,7 +641,7 @@ export default function Reports() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-white">{inventoryReport.total_stock_qty ?? 0} Items</div>
-                    <p className="text-xs text-slate-500 mt-1">MRP Value: ₹{(inventoryReport.valuation_mrp ?? 0).toFixed(2)}</p>
+                    <p className="text-xs text-slate-500 mt-1">MRP Value: ₹{Number(inventoryReport.valuation_mrp ?? 0).toFixed(2)}</p>
                   </CardContent>
                 </Card>
               </div>

@@ -34,6 +34,8 @@ export default function AdminLayout() {
     fetchSales, 
     fetchPurchases, 
     fetchDashboard,
+    branches,
+    fetchBranches,
     selectedBranchId,
     setSelectedBranchId
   } = useDataStore();
@@ -68,6 +70,7 @@ export default function AdminLayout() {
 
   useEffect(() => {
     if (!user) return;
+    fetchBranches();
     fetchDashboard();
     fetchCustomers();
     fetchSuppliers();
@@ -215,8 +218,9 @@ export default function AdminLayout() {
                 className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
               >
                 <option value="">All Branches</option>
-                <option value="1">Branch 1 (Chandan Vihar)</option>
-                <option value="2">Branch 2 (Shivpuri)</option>
+                {branches.map((b: any) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
               </select>
             )}
 

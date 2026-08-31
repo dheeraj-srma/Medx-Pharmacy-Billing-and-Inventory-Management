@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Boolean, Float, ForeignKey, Text
+from decimal import Decimal
+from sqlalchemy import Column, Integer, String, Boolean, Numeric, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from app.database.database import Base
 
@@ -23,14 +24,15 @@ class Product(Base):
     description = Column(Text, nullable=True)
     manufacturer = Column(String, nullable=True)
     pack_size = Column(String, nullable=True) # e.g. "15 Tablets"
+    units_per_pack = Column(Integer, default=1, nullable=False) # Smallest sellable units per package
     image_url = Column(String, nullable=True)
-    mrp = Column(Float, nullable=False)
-    selling_price = Column(Float, nullable=False)
+    mrp = Column(Numeric(12, 2), nullable=False)
+    selling_price = Column(Numeric(12, 2), nullable=False)
     reorder_level = Column(Integer, default=10)
     barcode = Column(String, unique=True, index=True, nullable=True)
     sku = Column(String, unique=True, index=True, nullable=True)
     hsn_code = Column(String, nullable=True)
-    gst_percentage = Column(Float, default=0.0)
+    gst_percentage = Column(Numeric(5, 2), default=Decimal("0.00"))
     prescription_required = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     is_archived = Column(Boolean, default=False)

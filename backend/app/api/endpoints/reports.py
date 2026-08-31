@@ -27,11 +27,9 @@ def get_sales_report(
             func.date(Sale.sale_date) <= end_date
         )
         
-        if current_user.role == RoleEnum.SUPERADMIN:
-            if branch_id:
-                sales_query = sales_query.filter(Sale.branch_id == branch_id)
-        else:
-            sales_query = sales_query.filter(Sale.branch_id == current_user.branch_id)
+        authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
+        if authorized_branch is not None:
+            sales_query = sales_query.filter(Sale.branch_id == authorized_branch)
             
         sales_list = sales_query.all()
         
@@ -100,11 +98,9 @@ def get_purchases_report(
             Purchase.purchase_date <= end_date
         )
         
-        if current_user.role == RoleEnum.SUPERADMIN:
-            if branch_id:
-                purchases_query = purchases_query.filter(Purchase.branch_id == branch_id)
-        else:
-            purchases_query = purchases_query.filter(Purchase.branch_id == current_user.branch_id)
+        authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
+        if authorized_branch is not None:
+            purchases_query = purchases_query.filter(Purchase.branch_id == authorized_branch)
             
         purchases_list = purchases_query.all()
         
@@ -155,11 +151,9 @@ def get_inventory_valuation(
         ).join(Product, Product.id == InventoryBatch.product_id)\
          .filter(InventoryBatch.quantity_available > 0)
          
-        if current_user.role == RoleEnum.SUPERADMIN:
-            if branch_id:
-                query = query.filter(InventoryBatch.branch_id == branch_id)
-        else:
-            query = query.filter(InventoryBatch.branch_id == current_user.branch_id)
+        authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
+        if authorized_branch is not None:
+            query = query.filter(InventoryBatch.branch_id == authorized_branch)
             
         batches = query.all()
          

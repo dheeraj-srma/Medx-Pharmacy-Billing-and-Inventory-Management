@@ -21,12 +21,13 @@ def login_access_token(
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     elif not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+        raise HTTPException(status_code=401, detail="User account is deactivated. Contact administrator.")
     
+    # Store immutable user.id as subject
     return {
         "access_token": create_access_token(
-            user.email,
-            additional_claims={"role": user.role.value, "branch_id": user.branch_id}
+            user.id,
+            additional_claims={"role": user.role.value, "branch_id": user.branch_id, "email": user.email}
         ),
         "token_type": "bearer",
     }
@@ -35,10 +36,11 @@ def login_access_token(
 def register_user(
     *,
     db: Session = Depends(get_db),
-    user_in: UserCreate
+    user_in: UserCreate,
+    current_admin: User = Depends(get_current_active_admin)
 ) -> Any:
     """
-    Register new user.
+    Register new user. Only authorized administrators may create users.
     """
     user = db.query(User).filter(User.email == user_in.email).first()
     if user:
@@ -63,7 +65,7 @@ def read_users_me(
     current_user: User = Depends(get_current_user)
 ) -> Any:
     """
-    Get current user.
+    Get current user along with branch details.
     """
     return current_user
 

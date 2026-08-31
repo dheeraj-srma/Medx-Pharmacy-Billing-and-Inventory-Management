@@ -10,6 +10,7 @@ from typing import Any, Optional
 from datetime import date
 
 from app.services.validation_service import FieldIssue, Severity, IssueType
+from app.utils.phone import normalize_phone
 
 
 # ---------------------------------------------------------------------------
@@ -220,7 +221,7 @@ PHONE_RE = re.compile(r"^\+?[0-9\s\-().]{7,20}$")
 
 
 def validate_optional_phone(field_name: str, value: Any) -> Optional[FieldIssue]:
-    """Validate optional phone number format."""
+    """Validate optional phone number format and return normalized 10-digit format."""
     if not value:
         return None
     stripped = str(value).strip()
@@ -231,6 +232,16 @@ def validate_optional_phone(field_name: str, value: Any) -> Optional[FieldIssue]
             issue_type=IssueType.INVALID_FORMAT,
             message=f"{field_name} is not a valid phone number.",
             original_value=value,
+        )
+    raw, norm = normalize_phone(stripped)
+    if norm and norm != stripped:
+        return FieldIssue(
+            field_name=field_name,
+            severity=Severity.NORMALIZED,
+            issue_type=IssueType.NORMALIZED_VALUE,
+            message=f"{field_name} was normalized.",
+            original_value=value,
+            normalized_value=norm,
         )
     return None
 

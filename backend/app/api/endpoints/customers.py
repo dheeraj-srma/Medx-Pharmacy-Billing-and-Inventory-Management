@@ -1,27 +1,44 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from datetime import datetime
 from app.api import deps
 from app.models.customer import Customer
 from app.models.user import RoleEnum
 from app.schemas.customer import Customer as CustomerSchema, CustomerCreate, CustomerUpdate
+from app.utils.phone import normalize_phone
+from app.core.timezone import IST
 
 router = APIRouter()
 
 @router.get("/", response_model=List[CustomerSchema])
 def get_customers(
     branch_id: Optional[int] = None,
+    search: Optional[str] = None,
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
+    authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
     query = db.query(Customer)
-    if current_user.role == RoleEnum.SUPERADMIN:
-        if branch_id:
-            query = query.filter(Customer.branch_id == branch_id)
-    else:
-        query = query.filter(Customer.branch_id == current_user.branch_id)
+    if authorized_branch is not None:
+        query = query.filter(Customer.branch_id == authorized_branch)
         
-    customers = query.all()
+    if search:
+        s = search.strip()
+        _, norm_search = normalize_phone(s)
+        if norm_search:
+            query = query.filter(
+                (Customer.name.ilike(f"%{s}%")) |
+                (Customer.phone_normalized.like(f"%{norm_search}%")) |
+                (Customer.phone.like(f"%{s}%"))
+            )
+        else:
+            query = query.filter(
+                (Customer.name.ilike(f"%{s}%")) |
+                (Customer.phone.like(f"%{s}%"))
+            )
+            
+    customers = query.order_by(Customer.id.desc()).all()
     return customers
 
 @router.post("/", response_model=CustomerSchema)
@@ -36,7 +53,44 @@ def create_customer(
             detail="Superadmin has read-only access and cannot create customers."
         )
         
-    db_customer = Customer(**customer.model_dump(), branch_id=current_user.branch_id)
+    user_branch_id = deps.require_user_branch_id(current_user)
+    phone_raw, phone_norm = normalize_phone(customer.phone)
+    
+    # Deduplication check by phone_normalized within branch
+    if phone_norm:
+        existing = db.query(Customer).filter(
+            Customer.branch_id == user_branch_id,
+            Customer.phone_normalized == phone_norm
+        ).first()
+        if existing:
+            # Update customer details if provided
+            if customer.name and customer.name.strip() and not customer.name.startswith("Customer ("):
+                existing.name = customer.name.strip()
+            if customer.doctor_name:
+                existing.doctor_name = customer.doctor_name
+            if customer.address:
+                existing.address = customer.address
+            if customer.email:
+                existing.email = customer.email
+            if customer.whatsapp_opt_in:
+                existing.whatsapp_opt_in = True
+                existing.whatsapp_opt_in_at = datetime.now(IST)
+            db.commit()
+            db.refresh(existing)
+            return existing
+
+    db_customer = Customer(
+        name=customer.name.strip(),
+        phone=phone_raw,
+        phone_raw=phone_raw,
+        phone_normalized=phone_norm,
+        email=customer.email,
+        address=customer.address,
+        doctor_name=customer.doctor_name,
+        whatsapp_opt_in=customer.whatsapp_opt_in,
+        whatsapp_opt_in_at=datetime.now(IST) if customer.whatsapp_opt_in else None,
+        branch_id=user_branch_id
+    )
     db.add(db_customer)
     db.commit()
     db.refresh(db_customer)
@@ -80,10 +134,19 @@ def update_customer(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this branch's data.")
     
     update_data = customer.model_dump(exclude_unset=True)
+    if "phone" in update_data:
+        raw, norm = normalize_phone(update_data["phone"])
+        db_customer.phone = raw
+        db_customer.phone_raw = raw
+        db_customer.phone_normalized = norm
+        del update_data["phone"]
+        
+    if update_data.get("whatsapp_opt_in") and not db_customer.whatsapp_opt_in:
+        db_customer.whatsapp_opt_in_at = datetime.now(IST)
+
     for key, value in update_data.items():
         setattr(db_customer, key, value)
         
-    db.add(db_customer)
     db.commit()
     db.refresh(db_customer)
     return db_customer

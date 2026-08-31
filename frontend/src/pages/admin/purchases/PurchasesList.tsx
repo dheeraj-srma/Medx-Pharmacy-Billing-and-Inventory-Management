@@ -20,14 +20,18 @@ import autoTable from "jspdf-autotable";
 
 export default function PurchasesList() {
   const { showAlert } = useModal();
-  const { purchases, fetchPurchases } = useDataStore();
+  const { purchases, fetchPurchases, branches, fetchBranches } = useDataStore();
   const { data: purchasesData, loading } = purchases;
   const [search, setSearch] = useState("");
   
+  useEffect(() => {
+    fetchBranches();
+  }, [fetchBranches]);
+
   const getBranchName = (id?: number) => {
-    if (id === 1) return "Branch 1 (Chandan Vihar)";
-    if (id === 2) return "Branch 2 (Shivpuri)";
-    return `Branch ${id || ""}`;
+    const found = branches.find((b: any) => b.id === id);
+    if (found) return found.name;
+    return id ? `Branch ${id}` : "Branch";
   };
   
   // Inward Details Modal State
@@ -76,18 +80,21 @@ export default function PurchasesList() {
   };
 
   const getBranchDetails = (id?: number) => {
-    if (id === 2) {
+    const found = branches.find((b: any) => b.id === id);
+    if (found) {
       return {
-        address: "House No. 192-A, Shivpuri, BudhiSingh Pura, Jaipur, Rajasthan",
-        phone: "+91 8307407566",
-        email: "medxpharmacy7170@gmail.com",
-        gstin: "08GSFPD9061R1ZY"
+        name: found.name || "MedX Pharmacy",
+        address: found.address || "",
+        phone: found.phone || "",
+        email: found.email || "",
+        gstin: found.gstin || "08GSFPD9061R1ZY"
       };
     }
     return {
-      address: "Plot No. 20A, Chandan Vihar, Near Coaching Hub, Jaipur, Rajasthan",
-      phone: "+91 9145887170",
-      email: "medxpharmacy7170@gmail.com",
+      name: "MedX Pharmacy",
+      address: "",
+      phone: "",
+      email: "",
       gstin: "08GSFPD9061R1ZY"
     };
   };
@@ -163,7 +170,7 @@ export default function PurchasesList() {
     doc.setTextColor(28, 30, 41);
     doc.text(purchaseDetail.supplier?.company_name || "N/A", 145, 54);
     doc.text(purchaseDetail.supplier?.gst_number || "N/A", 145, 60);
-    doc.text(`Rs. ${purchaseDetail.grand_total.toFixed(2)}`, 145, 66);
+    doc.text(`Rs. ${Number(purchaseDetail.grand_total ?? 0).toFixed(2)}`, 145, 66);
     
     // Items table
     const tableData = (purchaseDetail.items || []).map((item: any, idx: number) => [
@@ -172,10 +179,10 @@ export default function PurchasesList() {
       item.batch_number,
       item.expiry_date,
       item.quantity,
-      `Rs. ${item.purchase_price.toFixed(2)}`,
-      `Rs. ${item.mrp.toFixed(2)}`,
-      `Rs. ${item.selling_price.toFixed(2)}`,
-      `Rs. ${(item.quantity * item.purchase_price).toFixed(2)}`
+      `Rs. ${Number(item.purchase_price ?? 0).toFixed(2)}`,
+      `Rs. ${Number(item.mrp ?? 0).toFixed(2)}`,
+      `Rs. ${Number(item.selling_price ?? 0).toFixed(2)}`,
+      `Rs. ${(item.quantity * Number(item.purchase_price ?? 0)).toFixed(2)}`
     ]);
 
     autoTable(doc, {
@@ -212,7 +219,7 @@ export default function PurchasesList() {
     doc.text("Inward Grand Total:", 124, finalY + 9);
     doc.setFontSize(10.5);
     doc.setTextColor(67, 56, 202);
-    doc.text(`Rs. ${purchaseDetail.grand_total.toFixed(2)}`, 192, finalY + 9, { align: "right" });
+    doc.text(`Rs. ${Number(purchaseDetail.grand_total ?? 0).toFixed(2)}`, 192, finalY + 9, { align: "right" });
     
     doc.save(`Inward_Receipt_${purchaseDetail.invoice_number || purchaseDetail.id}.pdf`);
   };
@@ -287,7 +294,7 @@ export default function PurchasesList() {
                       {getBranchName(purchase.branch_id)}
                     </span>
                   <TableCell>
-                    <div className="font-bold text-emerald-400 font-mono">₹{purchase.grand_total.toFixed(2)}</div>
+                    <div className="font-bold text-emerald-400 font-mono">₹{Number(purchase.grand_total ?? 0).toFixed(2)}</div>
                   </TableCell>
                   <TableCell className="text-right">
                     <Tooltip>
@@ -385,10 +392,10 @@ export default function PurchasesList() {
                     <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
                       <span className="text-xs text-slate-500 font-medium">Payment & Totals</span>
                       <div className="text-2xl font-bold text-emerald-400 font-mono">
-                        ₹{purchaseDetail.grand_total.toFixed(2)}
+                        ₹{Number(purchaseDetail.grand_total ?? 0).toFixed(2)}
                       </div>
                       <div className="text-xs text-slate-400">
-                        Tax: ₹{purchaseDetail.tax_amount.toFixed(2)} • Items: {purchaseDetail.items?.length || 0}
+                        Tax: ₹{Number(purchaseDetail.tax_amount ?? 0).toFixed(2)} • Items: {purchaseDetail.items?.length || 0}
                       </div>
                     </div>
                   </div>
@@ -442,16 +449,16 @@ export default function PurchasesList() {
                                   {item.quantity}
                                 </TableCell>
                                 <TableCell className="text-right font-mono text-slate-300">
-                                  ₹{item.purchase_price.toFixed(2)}
+                                  ₹{Number(item.purchase_price ?? 0).toFixed(2)}
                                 </TableCell>
                                 <TableCell className="text-right font-mono text-slate-400">
-                                  ₹{item.mrp.toFixed(2)}
+                                  ₹{Number(item.mrp ?? 0).toFixed(2)}
                                 </TableCell>
                                 <TableCell className="text-right font-mono text-emerald-400">
-                                  ₹{item.selling_price.toFixed(2)}
+                                  ₹{Number(item.selling_price ?? 0).toFixed(2)}
                                 </TableCell>
                                 <TableCell className="text-right font-mono font-bold text-slate-100">
-                                  ₹{(item.quantity * item.purchase_price).toFixed(2)}
+                                  ₹{(item.quantity * Number(item.purchase_price ?? 0)).toFixed(2)}
                                 </TableCell>
                               </TableRow>
                             ))

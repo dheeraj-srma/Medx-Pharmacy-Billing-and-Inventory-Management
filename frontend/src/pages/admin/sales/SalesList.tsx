@@ -74,7 +74,7 @@ export default function SalesList() {
                   </TableCell>
                   <TableCell className="text-slate-300">{sale.customer?.name || "Walk-in"}</TableCell>
                   <TableCell className="text-slate-300">{sale.payment_method}</TableCell>
-                  <TableCell className="font-bold text-emerald-400">₹{sale.grand_total.toFixed(2)}</TableCell>
+                  <TableCell className="font-bold text-emerald-400">₹{Number(sale.grand_total ?? 0).toFixed(2)}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className={sale.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : ''}>
                       {sale.status}

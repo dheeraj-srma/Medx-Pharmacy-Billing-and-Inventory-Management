@@ -40,6 +40,7 @@ def get_active_batches(
     current_user = Depends(deps.get_current_active_user)
 ):
     today = date.today()
+    authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
     query = db.query(
         InventoryBatch.id,
         InventoryBatch.product_id,
@@ -60,12 +61,11 @@ def get_active_batches(
      .filter(Product.is_active == True)\
      .filter(Product.is_archived == False)\
      .filter(InventoryBatch.quantity_available > 0)\
-     .filter(InventoryBatch.expiry_date >= today)
+     .filter(InventoryBatch.expiry_date >= today)\
+     .filter(InventoryBatch.is_placeholder_expiry == False)
 
-    if branch_id:
-        query = query.filter(InventoryBatch.branch_id == branch_id)
-    elif current_user.role != RoleEnum.SUPERADMIN:
-        query = query.filter(InventoryBatch.branch_id == current_user.branch_id)
+    if authorized_branch is not None:
+        query = query.filter(InventoryBatch.branch_id == authorized_branch)
 
     results = query.order_by(Product.name.asc(), InventoryBatch.expiry_date.asc()).all()
     
@@ -104,11 +104,9 @@ def get_all_batches(
         Product.sku.label("product_sku")
     ).join(Product, Product.id == InventoryBatch.product_id)
     
-    if current_user.role == RoleEnum.SUPERADMIN:
-        if branch_id:
-            query = query.filter(InventoryBatch.branch_id == branch_id)
-    else:
-        query = query.filter(InventoryBatch.branch_id == current_user.branch_id)
+    authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
+    if authorized_branch is not None:
+        query = query.filter(InventoryBatch.branch_id == authorized_branch)
         
     if search:
         query = query.filter(
@@ -161,6 +159,7 @@ def get_transactions(
     current_user = Depends(deps.get_current_active_user)
 ):
     from app.models.user import User as UserModel
+    authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
     query = db.query(
         InventoryTransaction,
         Product.name.label("product_name"),
@@ -170,11 +169,8 @@ def get_transactions(
      .join(InventoryBatch, InventoryBatch.id == InventoryTransaction.batch_id)\
      .join(UserModel, UserModel.id == InventoryTransaction.user_id)
      
-    if current_user.role == RoleEnum.SUPERADMIN:
-        if branch_id:
-            query = query.filter(InventoryTransaction.branch_id == branch_id)
-    else:
-        query = query.filter(InventoryTransaction.branch_id == current_user.branch_id)
+    if authorized_branch is not None:
+        query = query.filter(InventoryTransaction.branch_id == authorized_branch)
         
     results = query.order_by(InventoryTransaction.timestamp.desc()).all()
      

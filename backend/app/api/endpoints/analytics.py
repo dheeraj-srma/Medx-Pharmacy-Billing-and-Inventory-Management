@@ -21,6 +21,7 @@ def get_dashboard_stats(
     today = date.today()
     first_day_of_month = today.replace(day=1)
     thirty_days_from_now = today + timedelta(days=30)
+    authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
     
     # Base queries
     revenue_today_query = db.query(func.sum(Sale.grand_total)).filter(func.date(Sale.sale_date) == today)
@@ -35,25 +36,19 @@ def get_dashboard_stats(
     expiring_soon_query = db.query(func.count(InventoryBatch.id)).filter(
         InventoryBatch.quantity_available > 0,
         InventoryBatch.expiry_date >= today,
-        InventoryBatch.expiry_date <= thirty_days_from_now
+        InventoryBatch.expiry_date <= thirty_days_from_now,
+        InventoryBatch.is_placeholder_expiry == False
     )
     
-    if current_user.role == RoleEnum.SUPERADMIN:
-        if branch_id:
-            revenue_today_query = revenue_today_query.filter(Sale.branch_id == branch_id)
-            revenue_month_query = revenue_month_query.filter(Sale.branch_id == branch_id)
-            invoices_today_query = invoices_today_query.filter(Sale.branch_id == branch_id)
-            low_stock_query = low_stock_query.filter(InventoryBatch.branch_id == branch_id)
-            expiring_soon_query = expiring_soon_query.filter(InventoryBatch.branch_id == branch_id)
-    else:
-        revenue_today_query = revenue_today_query.filter(Sale.branch_id == current_user.branch_id)
-        revenue_month_query = revenue_month_query.filter(Sale.branch_id == current_user.branch_id)
-        invoices_today_query = invoices_today_query.filter(Sale.branch_id == current_user.branch_id)
-        low_stock_query = low_stock_query.filter(InventoryBatch.branch_id == current_user.branch_id)
-        expiring_soon_query = expiring_soon_query.filter(InventoryBatch.branch_id == current_user.branch_id)
+    if authorized_branch is not None:
+        revenue_today_query = revenue_today_query.filter(Sale.branch_id == authorized_branch)
+        revenue_month_query = revenue_month_query.filter(Sale.branch_id == authorized_branch)
+        invoices_today_query = invoices_today_query.filter(Sale.branch_id == authorized_branch)
+        low_stock_query = low_stock_query.filter(InventoryBatch.branch_id == authorized_branch)
+        expiring_soon_query = expiring_soon_query.filter(InventoryBatch.branch_id == authorized_branch)
         
-    today_sales = revenue_today_query.scalar() or 0.0
-    month_sales = revenue_month_query.scalar() or 0.0
+    today_sales = float(revenue_today_query.scalar() or 0.0)
+    month_sales = float(revenue_month_query.scalar() or 0.0)
     today_invoices = invoices_today_query.scalar() or 0
     low_stock_count = low_stock_query.scalar() or 0
     expiring_soon_count = expiring_soon_query.scalar() or 0
@@ -73,12 +68,10 @@ def get_recent_sales(
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
+    authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
     query = db.query(Sale)
-    if current_user.role == RoleEnum.SUPERADMIN:
-        if branch_id:
-            query = query.filter(Sale.branch_id == branch_id)
-    else:
-        query = query.filter(Sale.branch_id == current_user.branch_id)
+    if authorized_branch is not None:
+        query = query.filter(Sale.branch_id == authorized_branch)
         
     sales = query.order_by(Sale.created_at.desc()).limit(limit).all()
     return sales
@@ -92,6 +85,7 @@ def get_sales_chart_data(
 ):
     end_date = date.today()
     start_date = end_date - timedelta(days=days-1)
+    authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
     
     chart_data = []
     
@@ -99,11 +93,8 @@ def get_sales_chart_data(
         func.date(Sale.sale_date) >= start_date
     )
     
-    if current_user.role == RoleEnum.SUPERADMIN:
-        if branch_id:
-            query = query.filter(Sale.branch_id == branch_id)
-    else:
-        query = query.filter(Sale.branch_id == current_user.branch_id)
+    if authorized_branch is not None:
+        query = query.filter(Sale.branch_id == authorized_branch)
         
     sales = query.all()
     
@@ -115,7 +106,7 @@ def get_sales_chart_data(
     for s_date, total in sales:
         d_str = s_date.date().isoformat()
         if d_str in sales_by_date:
-            sales_by_date[d_str] += total
+            sales_by_date[d_str] += float(total)
             
     for k, v in sales_by_date.items():
         chart_data.append({"date": k, "total": v})

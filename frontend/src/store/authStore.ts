@@ -1,12 +1,24 @@
 import { create } from 'zustand';
 import api, { cacheStore } from '../services/api';
 
-interface User {
+export interface Branch {
+  id: number;
+  code: string;
+  name: string;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  gstin?: string | null;
+  is_active?: boolean;
+}
+
+export interface User {
   id: number;
   email: string;
   full_name: string | null;
   role: 'admin' | 'staff' | 'superadmin';
   branch_id: number | null;
+  branch?: Branch | null;
 }
 
 interface AuthState {
