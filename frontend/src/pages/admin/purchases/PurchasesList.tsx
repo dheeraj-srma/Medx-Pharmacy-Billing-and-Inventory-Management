@@ -95,7 +95,7 @@ export default function PurchasesList() {
   const handlePrintInwardPDF = async () => {
     if (!purchaseDetail) return;
     
-    const doc = new jsPDF();
+    const doc = new jsPDF({ compress: true });
     
     // Top Accent Bar (Inspired by POS/HTML template)
     doc.setFillColor(67, 56, 202); // #4338CA
@@ -104,7 +104,7 @@ export default function PurchasesList() {
     let textXOffset = 14;
     try {
       const logoImg = await loadLogo();
-      doc.addImage(logoImg, "PNG", 14, 22, 12, 12);
+      doc.addImage(logoImg, "JPEG", 14, 22, 12, 12, undefined, "FAST");
       textXOffset = 28;
     } catch (e) {
       console.error("Failed to load logo.png, printing without it", e);

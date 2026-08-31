@@ -1,5 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useDataStore } from "../../../store/dataStore";
+import api from "../../../services/api";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -40,7 +41,35 @@ export default function Reports() {
     fetchSalesReport,
     fetchPurchaseReport,
     fetchInventoryReport,
+    selectedBranchId,
   } = useDataStore();
+
+  const [storeSettings, setStoreSettings] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const params: any = {};
+        if (selectedBranchId !== undefined) {
+          params.branch_id = selectedBranchId;
+        }
+        const res = await api.get("/settings/", { params });
+        setStoreSettings(res.data);
+      } catch (e) {
+        console.error("Failed to fetch settings in Reports", e);
+      }
+    };
+    fetchSettings();
+  }, [selectedBranchId]);
+
+  const loadLogo = (): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = "/logo.png";
+      img.onload = () => resolve(img);
+      img.onerror = (err) => reject(err);
+    });
+  };
 
   const {
     salesReport,
@@ -77,32 +106,96 @@ export default function Reports() {
   }, [activeTab, startDate, endDate, fetchSalesReport, fetchPurchaseReport, fetchInventoryReport]);
 
   // PDF Generators
-  const exportSalesReportPDF = () => {
-    if (!salesReport) return;
-    const doc = new jsPDF();
-    doc.setFontSize(20);
-    doc.setTextColor(41, 128, 185);
-    doc.text("Med-X Pharmacy: Sales Report", 14, 22);
+  // PDF Helpers & Styling
+  const drawDefaultReportHeader = async (doc: jsPDF, badgeText: string) => {
+    // Top Accent Bar (Indigo #4338CA)
+    doc.setFillColor(67, 56, 202);
+    doc.rect(14, 15, 182, 3, "F");
 
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Period: ${startDate} to ${endDate}`, 14, 30);
-    doc.text(`Generated On: ${new Date().toLocaleString()}`, 14, 35);
-    doc.line(14, 40, 196, 40);
+    let textXOffset = 14;
+    try {
+      const logoImg = await loadLogo();
+      doc.addImage(logoImg, "JPEG", 14, 22, 12, 12, undefined, "FAST");
+      textXOffset = 28;
+    } catch (e) {
+      console.error("Failed to load logo.png, printing without it", e);
+    }
+
+    // Title
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22);
+    doc.setTextColor(67, 56, 202); // #4338CA (Indigo)
+    doc.text("Med-X Pharmacy", textXOffset, 31);
+
+    // Subtitle / Branch Metadata
+    const branchAddress = storeSettings?.address || "Jaipur, Rajasthan";
+    const branchPhone = storeSettings?.phone || "";
+    const branchEmail = storeSettings?.email || "medxpharmacy7170@gmail.com";
+    const printGstinEnabled = storeSettings?.print_gstin ?? true;
+    let branchGstin = "";
+    if (printGstinEnabled && storeSettings?.gstin) {
+      branchGstin = `GSTIN: ${storeSettings.gstin}`;
+    }
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(100, 116, 139); // Slate-500
+    doc.text(branchAddress, textXOffset, 37);
+    
+    let contactLine = `Contact: ${branchPhone} | ${branchEmail}`;
+    if (branchGstin) {
+      contactLine += ` | ${branchGstin}`;
+    }
+    doc.text(contactLine, textXOffset, 42);
+
+    // Badge Label (on the right)
+    doc.setFillColor(67, 56, 202);
+    doc.rect(130, 22, 66, 8, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(255, 255, 255);
+    doc.text(badgeText, 133, 27.5);
+
+    // Thin dividing line
+    doc.setDrawColor(226, 232, 240); // slate-200
+    doc.setLineWidth(0.5);
+    doc.line(14, 46, 196, 46);
+  };
+
+  const exportSalesReportPDF = async () => {
+    if (!salesReport) return;
+    const doc = new jsPDF({ compress: true });
+    
+    await drawDefaultReportHeader(doc, "SALES SUMMARY REPORT");
+
+    // Print metadata about report period
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105); // slate-600
+    doc.text(`REPORT PERIOD: ${appliedStart} to ${appliedEnd}`, 14, 53);
+    doc.text(`GENERATED: ${new Date().toLocaleString()}`, 110, 53);
 
     const pm = salesReport.payment_methods || {};
 
     // Summary Box
-    doc.setFontSize(12);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Total Revenue: Rs ${(salesReport.total_revenue ?? 0).toFixed(2)}`, 14, 50);
-    doc.text(`Total Tax Collected: Rs ${(salesReport.total_tax ?? 0).toFixed(2)}`, 14, 57);
-    doc.text(`Total Invoices: ${salesReport.total_invoices ?? 0}`, 14, 64);
+    doc.setFillColor(248, 250, 252); // slate-50
+    doc.setDrawColor(226, 232, 240); // slate-200
+    doc.setLineWidth(0.5);
+    doc.rect(14, 58, 182, 26, "FD");
 
-    doc.text("Payment Breakdown:", 120, 50);
-    doc.text(`- Cash: Rs ${(pm.Cash ?? 0).toFixed(2)}`, 120, 57);
-    doc.text(`- UPI: Rs ${(pm.UPI ?? 0).toFixed(2)}`, 120, 64);
-    doc.text(`- Card: Rs ${(pm.Card ?? 0).toFixed(2)}`, 120, 71);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(30, 41, 59); // slate-800
+    doc.text(`Total Revenue: Rs ${(salesReport.total_revenue ?? 0).toFixed(2)}`, 18, 64);
+    doc.text(`Total Tax Collected: Rs ${(salesReport.total_tax ?? 0).toFixed(2)}`, 18, 71);
+    doc.text(`Total Invoices: ${salesReport.total_invoices ?? 0}`, 18, 78);
+
+    doc.text("Payment Breakdown:", 120, 64);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.text(`- Cash: Rs ${(pm.Cash ?? 0).toFixed(2)}`, 120, 70);
+    doc.text(`- UPI: Rs ${(pm.UPI ?? 0).toFixed(2)}`, 120, 75);
+    doc.text(`- Card: Rs ${(pm.Card ?? 0).toFixed(2)}`, 120, 80);
 
     const headers = [["Date", "Invoices", "Subtotal", "Tax Collected", "Grand Total"]];
     const rows = salesReport.daily_summary.map((day: any) => [
@@ -114,35 +207,42 @@ export default function Reports() {
     ]);
 
     autoTable(doc, {
-      startY: 80,
+      startY: 90,
       head: headers,
       body: rows,
       theme: "grid",
-      headStyles: { fillColor: [41, 128, 185] },
+      headStyles: { fillColor: [67, 56, 202] }, // Match indigo
+      styles: { fontSize: 8.5 },
     });
 
-    doc.save(`Sales_Report_${startDate}_to_${endDate}.pdf`);
+    doc.save(`Sales_Report_${appliedStart}_to_${appliedEnd}.pdf`);
   };
 
-  const exportPurchaseReportPDF = () => {
+  const exportPurchaseReportPDF = async () => {
     if (!purchaseReport) return;
-    const doc = new jsPDF();
-    doc.setFontSize(20);
-    doc.setTextColor(41, 128, 185);
-    doc.text("Med-X Pharmacy: Purchase Expenses Report", 14, 22);
+    const doc = new jsPDF({ compress: true });
+    
+    await drawDefaultReportHeader(doc, "PURCHASE EXPENSE REPORT");
 
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Period: ${startDate} to ${endDate}`, 14, 30);
-    doc.text(`Generated On: ${new Date().toLocaleString()}`, 14, 35);
-    doc.line(14, 40, 196, 40);
+    // Print metadata about report period
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105); // slate-600
+    doc.text(`REPORT PERIOD: ${appliedStart} to ${appliedEnd}`, 14, 53);
+    doc.text(`GENERATED: ${new Date().toLocaleString()}`, 110, 53);
 
     // Summary Box
-    doc.setFontSize(12);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Total Expenses: Rs ${purchaseReport.total_expense.toFixed(2)}`, 14, 50);
-    doc.text(`Total Purchases: ${purchaseReport.total_purchases}`, 14, 57);
-    doc.text(`Total Tax Paid: Rs ${purchaseReport.total_tax.toFixed(2)}`, 14, 64);
+    doc.setFillColor(248, 250, 252); // slate-50
+    doc.setDrawColor(226, 232, 240); // slate-200
+    doc.setLineWidth(0.5);
+    doc.rect(14, 58, 182, 22, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(30, 41, 59); // slate-800
+    doc.text(`Total Expenses: Rs ${purchaseReport.total_expense.toFixed(2)}`, 18, 64);
+    doc.text(`Total Purchases: ${purchaseReport.total_purchases}`, 18, 71);
+    doc.text(`Total Tax Paid: Rs ${purchaseReport.total_tax.toFixed(2)}`, 120, 64);
 
     const headers = [["Date", "Purchases Count", "Grand Total"]];
     const rows = purchaseReport.daily_summary.map((day: any) => [
@@ -152,44 +252,55 @@ export default function Reports() {
     ]);
 
     autoTable(doc, {
-      startY: 75,
+      startY: 86,
       head: headers,
       body: rows,
       theme: "grid",
-      headStyles: { fillColor: [41, 128, 185] },
+      headStyles: { fillColor: [67, 56, 202] }, // Match indigo
+      styles: { fontSize: 8.5 },
     });
 
-    doc.save(`Purchase_Report_${startDate}_to_${endDate}.pdf`);
+    doc.save(`Purchase_Report_${appliedStart}_to_${appliedEnd}.pdf`);
   };
 
-  const exportInventoryReportPDF = () => {
+  const exportInventoryReportPDF = async () => {
     if (!inventoryReport) return;
-    const doc = new jsPDF();
-    doc.setFontSize(20);
-    doc.setTextColor(41, 128, 185);
-    doc.text("Med-X Pharmacy: Inventory Summary & Valuation", 14, 22);
+    const doc = new jsPDF({ compress: true });
+    
+    await drawDefaultReportHeader(doc, "INVENTORY VALUATION");
 
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Generated On: ${new Date().toLocaleString()}`, 14, 30);
-    doc.line(14, 35, 196, 35);
+    // Print metadata about generation time
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105); // slate-600
+    doc.text(`GENERATED: ${new Date().toLocaleString()}`, 14, 53);
 
     // Summary Box
-    doc.setFontSize(12);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Total Unique Products: ${inventoryReport.total_products}`, 14, 45);
-    doc.text(`Total Active Batches: ${inventoryReport.total_batches}`, 14, 52);
-    doc.text(`Total Stock Quantity: ${inventoryReport.total_stock_qty}`, 14, 59);
+    doc.setFillColor(248, 250, 252); // slate-50
+    doc.setDrawColor(226, 232, 240); // slate-200
+    doc.setLineWidth(0.5);
+    doc.rect(14, 58, 182, 26, "FD");
 
-    doc.text("Valuation summary:", 120, 45);
-    doc.text(`- Cost Price: Rs ${inventoryReport.valuation_purchase.toFixed(2)}`, 120, 52);
-    doc.text(`- Selling Price: Rs ${inventoryReport.valuation_selling.toFixed(2)}`, 120, 59);
-    doc.text(`- MRP Price: Rs ${inventoryReport.valuation_mrp.toFixed(2)}`, 120, 66);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(30, 41, 59); // slate-800
+    doc.text(`Total Unique Products: ${inventoryReport.total_products}`, 18, 64);
+    doc.text(`Total Active Batches: ${inventoryReport.total_batches}`, 18, 71);
+    doc.text(`Total Stock Quantity: ${inventoryReport.total_stock_qty}`, 18, 78);
+
+    doc.text("Valuation Summary:", 120, 64);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.text(`- Cost Price: Rs ${inventoryReport.valuation_purchase.toFixed(2)}`, 120, 70);
+    doc.text(`- Selling Price: Rs ${inventoryReport.valuation_selling.toFixed(2)}`, 120, 75);
+    doc.text(`- MRP Price: Rs ${inventoryReport.valuation_mrp.toFixed(2)}`, 120, 80);
 
     // Low Stock Table
-    doc.setFontSize(14);
-    doc.setTextColor(41, 128, 185);
-    doc.text("Low Stock Items (<= 10 qty)", 14, 78);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(217, 119, 6); // amber-600
+    doc.text("Low Stock Items (<= 10 qty)", 14, 93);
+    
     const lowStockHeaders = [["Product", "Batch", "Qty Left", "MRP", "Selling Price"]];
     const lowStockRows = inventoryReport.low_stock_items.map((item: any) => [
       item.product_name,
@@ -200,17 +311,19 @@ export default function Reports() {
     ]);
 
     autoTable(doc, {
-      startY: 83,
+      startY: 97,
       head: lowStockHeaders,
       body: lowStockRows,
       theme: "grid",
-      headStyles: { fillColor: [243, 156, 18] }, // Orange/Yellow
+      headStyles: { fillColor: [217, 119, 6] },
+      styles: { fontSize: 8 },
     });
 
     // Expiring Soon Table
-    const nextY = (doc as any).lastAutoTable.finalY + 15;
-    doc.setFontSize(14);
-    doc.setTextColor(192, 57, 43); // Red
+    const nextY = (doc as any).lastAutoTable.finalY + 12;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(220, 38, 38); // red-600
     doc.text("Expiring Soon Items (within 30 days)", 14, nextY);
 
     const expiringHeaders = [["Product", "Batch", "Expiry Date", "Qty Left", "MRP"]];
@@ -223,11 +336,12 @@ export default function Reports() {
     ]);
 
     autoTable(doc, {
-      startY: nextY + 5,
+      startY: nextY + 4,
       head: expiringHeaders,
       body: expiringRows,
       theme: "grid",
-      headStyles: { fillColor: [192, 57, 43] },
+      headStyles: { fillColor: [220, 38, 38] },
+      styles: { fontSize: 8 },
     });
 
     doc.save("Inventory_Valuation_Report.pdf");
