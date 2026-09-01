@@ -45,7 +45,7 @@ class SaleItem(Base):
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     batch_id = Column(Integer, ForeignKey("inventory_batches.id"), nullable=False)
     
-    quantity = Column(Integer, nullable=False) # In smallest sellable units
+    quantity = Column(Numeric(12, 4), nullable=False) # Supports fractional quantities for loose tablets
     unit_price = Column(Numeric(12, 2), nullable=False) # Authoritative selling price
     discount = Column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
     total_price = Column(Numeric(12, 2), nullable=False)

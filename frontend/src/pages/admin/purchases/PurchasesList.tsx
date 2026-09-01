@@ -18,6 +18,7 @@ import { Plus, Search, Eye, X, Building2, Calendar, FileText, Printer, Loader2, 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { formatDateDDMMYYYY } from "@/lib/utils";
 
 export default function PurchasesList() {
   const { showAlert } = useModal();
@@ -290,7 +291,7 @@ export default function PurchasesList() {
                   <TableCell>
                     <div className="text-sm text-slate-300 flex items-center gap-1.5">
                       <Calendar size={13} className="text-slate-500" />
-                      {new Date(purchase.purchase_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                      {formatDateDDMMYYYY(purchase.purchase_date)}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -391,7 +392,7 @@ export default function PurchasesList() {
                     <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
                       <span className="text-xs text-slate-500 font-medium">Invoice Info</span>
                       <div className="text-sm font-medium text-slate-200">
-                        Date: <span className="text-white">{purchaseDetail.purchase_date}</span>
+                        Date: <span className="text-white">{formatDateDDMMYYYY(purchaseDetail.purchase_date)}</span>
                       </div>
                       <div className="text-sm font-medium text-slate-200">
                         Branch: <span className="text-white">{getBranchName(purchaseDetail.branch_id)}</span>

@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ShoppingCart, Trash2, Search, Printer, CheckCircle, Calendar, AlertCircle } from "lucide-react";
 
+import { formatDateDDMMYYYY, checkLooseEligibility } from "@/lib/utils";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -269,38 +270,32 @@ export default function POS() {
     }
   }, [selectedIndex, filteredBatches.length, isDropdownOpen]);
 
-  const parsePackSize = (packSizeStr: string | null | undefined): number => {
-    if (!packSizeStr) return 10;
-    const match = packSizeStr.match(/(\d+)/);
-    return match ? parseInt(match[1]) : 10;
-  };
-
   const addToCart = (batch: BatchItem) => {
+    const eligibility = checkLooseEligibility(batch.pack_size, batch.product_name);
     const existingItem = cart.find(item => item.batch_id === batch.id);
-    const tabletsPerPack = parsePackSize(batch.pack_size);
     
     if (existingItem) {
       if (existingItem.quantity < batch.quantity_available) {
         setCart(cart.map(item => {
-          if (item.batch_id === batch.id) {
+          if (item.cart_id === existingItem.cart_id) {
             const nextQty = item.quantity + 1;
             if (item.is_loose) {
               const nextPacks = (item.packs || 0) + 1;
               const looseTabs = item.loose_tablets || 0;
-              const calculatedQty = nextPacks + (looseTabs / tabletsPerPack);
-              const totalPrice = (nextPacks * item.unit_price) + (looseTabs * (item.unit_price / tabletsPerPack));
+              const calculatedQty = Number((nextPacks + (looseTabs / (item.tablets_per_pack || 1))).toFixed(4));
+              const totalPrice = Number(((nextPacks * item.unit_price) + (looseTabs * (item.unit_price / (item.tablets_per_pack || 1)))).toFixed(2));
               return { 
                 ...item, 
                 quantity: calculatedQty, 
-                packs: nextPacks,
+                packs: nextPacks, 
                 total_price: totalPrice 
               };
             } else {
               return { 
                 ...item, 
                 quantity: nextQty, 
-                packs: nextQty,
-                total_price: nextQty * item.unit_price 
+                packs: nextQty, 
+                total_price: Number((nextQty * item.unit_price).toFixed(2)) 
               };
             }
           }
@@ -310,21 +305,26 @@ export default function POS() {
         showAlert("Stock Limit", "Cannot exceed available stock.");
       }
     } else {
+      const uniqueCartId = `cart_${batch.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       setCart([...cart, {
+        cart_id: uniqueCartId,
         product_id: batch.product_id,
         batch_id: batch.id,
         product_name: batch.product_name,
         generic_name: batch.generic_name,
         batch_number: batch.batch_number,
+        expiry_date: batch.expiry_date,
         quantity: 1,
         unit_price: batch.selling_price,
         discount: 0,
         total_price: batch.selling_price,
         max_qty: batch.quantity_available,
+        can_sell_loose: eligibility.canSellLoose,
+        unit_label: eligibility.unitLabel,
+        tablets_per_pack: eligibility.unitsPerPack,
         is_loose: false,
         packs: 1,
-        loose_tablets: 0,
-        tablets_per_pack: tabletsPerPack
+        loose_tablets: 0
       }]);
     }
     setSearch("");
@@ -363,32 +363,34 @@ export default function POS() {
     }
   };
 
-  const removeFromCart = (batch_id: number) => {
-    setCart(cart.filter(item => item.batch_id !== batch_id));
+  const removeFromCart = (cart_id: string) => {
+    setCart(prevCart => prevCart.filter(item => item.cart_id !== cart_id));
   };
 
-  const toggleLoose = (batch_id: number) => {
-    setCart(cart.map(item => {
-      if (item.batch_id === batch_id) {
+  const toggleLoose = (cart_id: string) => {
+    setCart(prevCart => prevCart.map(item => {
+      if (item.cart_id === cart_id) {
         const nextLoose = !item.is_loose;
         if (nextLoose) {
-          const packs = Math.floor(item.quantity) || 0;
+          // As requested: start with 0 packs, 0 tabs when selling loose
           return {
             ...item,
             is_loose: true,
-            packs: packs,
+            packs: 0,
             loose_tablets: 0,
-            quantity: packs,
-            total_price: packs * item.unit_price
+            quantity: 0,
+            total_price: 0
           };
         } else {
+          // Switch back to whole pack: reset to 1 pack
           const finalPacks = Math.max(1, item.packs || 1);
           return {
             ...item,
             is_loose: false,
-            quantity: finalPacks,
             packs: finalPacks,
-            total_price: finalPacks * item.unit_price
+            loose_tablets: 0,
+            quantity: finalPacks,
+            total_price: Number((finalPacks * item.unit_price).toFixed(2))
           };
         }
       }
@@ -396,22 +398,22 @@ export default function POS() {
     }));
   };
 
-  const updatePacks = (batch_id: number, newPacks: number) => {
-    setCart(cart.map(item => {
-      if (item.batch_id === batch_id) {
+  const updatePacks = (cart_id: string, newPacks: number) => {
+    setCart(prevCart => prevCart.map(item => {
+      if (item.cart_id === cart_id) {
         const maxPacks = Math.floor(item.max_qty);
         const validPacks = Math.max(0, Math.min(newPacks, maxPacks));
         const currentLoose = item.loose_tablets || 0;
-        const totalReq = validPacks + (currentLoose / item.tablets_per_pack);
+        const totalReq = validPacks + (currentLoose / (item.tablets_per_pack || 1));
         
         let finalPacks = validPacks;
         if (totalReq > item.max_qty) {
-          finalPacks = Math.floor(item.max_qty - (currentLoose / item.tablets_per_pack));
+          finalPacks = Math.floor(item.max_qty - (currentLoose / (item.tablets_per_pack || 1)));
           if (finalPacks < 0) finalPacks = 0;
         }
         
-        const calculatedQty = finalPacks + (currentLoose / item.tablets_per_pack);
-        const totalPrice = (finalPacks * item.unit_price) + (currentLoose * (item.unit_price / item.tablets_per_pack));
+        const calculatedQty = Number((finalPacks + (currentLoose / (item.tablets_per_pack || 1))).toFixed(4));
+        const totalPrice = Number(((finalPacks * item.unit_price) + (currentLoose * (item.unit_price / (item.tablets_per_pack || 1)))).toFixed(2));
         
         return {
           ...item,
@@ -424,22 +426,23 @@ export default function POS() {
     }));
   };
 
-  const updateLooseTablets = (batch_id: number, newTabs: number) => {
-    setCart(cart.map(item => {
-      if (item.batch_id === batch_id) {
-        const validTabs = Math.max(0, Math.min(newTabs, item.tablets_per_pack - 1));
+  const updateLooseTablets = (cart_id: string, newTabs: number) => {
+    setCart(prevCart => prevCart.map(item => {
+      if (item.cart_id === cart_id) {
+        const perPack = item.tablets_per_pack || 10;
+        const validTabs = Math.max(0, Math.min(newTabs, perPack - 1));
         const currentPacks = item.packs || 0;
-        const totalReq = currentPacks + (validTabs / item.tablets_per_pack);
+        const totalReq = currentPacks + (validTabs / perPack);
         
         let finalTabs = validTabs;
         if (totalReq > item.max_qty) {
           const remainingPacks = item.max_qty - currentPacks;
-          finalTabs = Math.floor(remainingPacks * item.tablets_per_pack);
+          finalTabs = Math.floor(remainingPacks * perPack);
           if (finalTabs < 0) finalTabs = 0;
         }
         
-        const calculatedQty = currentPacks + (finalTabs / item.tablets_per_pack);
-        const totalPrice = (currentPacks * item.unit_price) + (finalTabs * (item.unit_price / item.tablets_per_pack));
+        const calculatedQty = Number((currentPacks + (finalTabs / perPack)).toFixed(4));
+        const totalPrice = Number(((currentPacks * item.unit_price) + (finalTabs * (item.unit_price / perPack))).toFixed(2));
         
         return {
           ...item,
@@ -452,15 +455,16 @@ export default function POS() {
     }));
   };
 
-  const updateQuantity = (batch_id: number, newQty: number) => {
-    setCart(cart.map(item => {
-      if (item.batch_id === batch_id) {
+  const updateQuantity = (cart_id: string, newQty: number) => {
+    setCart(prevCart => prevCart.map(item => {
+      if (item.cart_id === cart_id) {
         const validQty = Math.max(1, Math.min(newQty, item.max_qty));
         return { 
           ...item, 
           quantity: validQty, 
-          packs: validQty,
-          total_price: validQty * item.unit_price 
+          packs: validQty, 
+          loose_tablets: 0,
+          total_price: Number((validQty * item.unit_price).toFixed(2)) 
         };
       }
       return item;
@@ -536,6 +540,17 @@ export default function POS() {
         custName = walkInName;
       }
 
+      // Validate that all cart items have quantity > 0
+      const zeroQtyItem = cart.find(it => !it.quantity || it.quantity <= 0);
+      if (zeroQtyItem) {
+        showAlert(
+          "Invalid Quantity", 
+          `Please specify at least 1 pack or 1 tablet/capsule for "${zeroQtyItem.product_name}".`
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
       const payload = {
         customer_id: finalCustomerId,
         total_amount: subtotal,
@@ -548,7 +563,7 @@ export default function POS() {
         items: cart.map(item => ({
           product_id: item.product_id,
           batch_id: item.batch_id,
-          quantity: item.quantity,
+          quantity: Number(item.quantity.toFixed(4)),
           unit_price: item.unit_price,
           discount: item.discount,
           total_price: item.total_price
@@ -558,14 +573,21 @@ export default function POS() {
       const res = await api.post("/sales/", payload);
 
       setPrintSnapshot({
-        cart: res.data.items && res.data.items.length > 0 ? res.data.items.map((it: any) => ({
-          product_name: it.product_name || cart.find(c => c.product_id === it.product_id)?.product_name || "Medicine",
-          batch_number: it.batch_number || cart.find(c => c.batch_id === it.batch_id)?.batch_number || "-",
-          quantity: it.quantity,
-          unit_price: Number(it.unit_price),
-          discount: Number(it.discount),
-          total_price: Number(it.total_price)
-        })) : [...cart],
+        cart: res.data.items && res.data.items.length > 0 ? res.data.items.map((it: any) => {
+          const matchedCartItem = cart.find(c => c.product_id === it.product_id || c.batch_id === it.batch_id);
+          return {
+            product_name: it.product_name || matchedCartItem?.product_name || "Medicine",
+            batch_number: it.batch_number || matchedCartItem?.batch_number || "-",
+            quantity: it.quantity,
+            unit_price: Number(it.unit_price),
+            discount: Number(it.discount),
+            total_price: Number(it.total_price),
+            is_loose: matchedCartItem?.is_loose,
+            packs: matchedCartItem?.packs,
+            loose_tablets: matchedCartItem?.loose_tablets,
+            tablets_per_pack: matchedCartItem?.tablets_per_pack
+          };
+        }) : [...cart],
         subtotal: Number(res.data.total_amount ?? subtotal),
         discountPercent,
         discountAmount: Number(res.data.discount_amount ?? discountAmount),
@@ -576,7 +598,7 @@ export default function POS() {
         customerName: custName,
         customerPhone: custPhone,
         invoiceNumber: res.data.invoice_number,
-        date: new Date(res.data.sale_date || res.data.created_at || Date.now()).toLocaleString()
+        date: formatDateDDMMYYYY(res.data.sale_date || res.data.created_at || Date.now(), true)
       });
 
       setCompletedSale(res.data);
@@ -592,7 +614,14 @@ export default function POS() {
       
     } catch (error: any) {
       console.error("Checkout failed", error);
-      showAlert("Error", error.response?.data?.detail || "Checkout failed");
+      const detail = error.response?.data?.detail;
+      let msg = "Checkout failed. Please check stock and try again.";
+      if (typeof detail === "string") {
+        msg = detail;
+      } else if (Array.isArray(detail)) {
+        msg = detail.map((d: any) => d.msg || d.message || JSON.stringify(d)).join(", ");
+      }
+      showAlert("Checkout Failed", msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -693,10 +722,12 @@ export default function POS() {
       item.product_name,
       item.batch_number,
       item.is_loose 
-        ? `${item.packs}p + ${item.loose_tablets}t`
-        : `${item.quantity}`,
+        ? `${item.packs || 0}p + ${item.loose_tablets || 0}t`
+        : (typeof item.quantity === "number" && !Number.isInteger(item.quantity)
+            ? item.quantity.toFixed(2)
+            : `${item.quantity}`),
       `Rs. ${item.is_loose
-        ? (item.unit_price / item.tablets_per_pack).toFixed(2)
+        ? (item.unit_price / (item.tablets_per_pack || 1)).toFixed(2)
         : item.unit_price.toFixed(2)}`,
       `${printSnapshot.discountPercent}%`,
       `${printSnapshot.taxPercent}%`,
@@ -900,7 +931,7 @@ export default function POS() {
                               Batch: {batch.batch_number}
                             </span>
                             <span className={`flex items-center gap-1 ${isExpiringSoon ? "text-amber-400 font-medium" : "text-slate-400"}`}>
-                              <Calendar size={12} /> Exp: {new Date(batch.expiry_date).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+                              <Calendar size={12} /> Exp: {formatDateDDMMYYYY(batch.expiry_date)}
                             </span>
                             {batch.pack_size && (
                               <span className="text-slate-400">• {batch.pack_size}</span>
@@ -969,7 +1000,7 @@ export default function POS() {
                   </TableRow>
                 ) : (
                   cart.map(item => (
-                    <TableRow key={item.batch_id} className="border-slate-800 hover:bg-slate-800/50">
+                    <TableRow key={item.cart_id} className="border-slate-800 hover:bg-slate-800/50">
                       <TableCell>
                         <div className="font-medium text-slate-200">{item.product_name}</div>
                         <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
@@ -977,8 +1008,8 @@ export default function POS() {
                           {item.generic_name && (
                             <span className="text-indigo-400/80">• {item.generic_name}</span>
                           )}
-                          {item.tablets_per_pack > 1 && (
-                            <span className="text-slate-500">• {item.tablets_per_pack} tabs/pack</span>
+                          {item.can_sell_loose && item.tablets_per_pack > 1 && (
+                            <span className="text-slate-500">• {item.tablets_per_pack} {item.unit_label || "tabs"}/pack</span>
                           )}
                         </div>
                       </TableCell>
@@ -991,7 +1022,7 @@ export default function POS() {
                                   type="number" 
                                   min="0"
                                   value={item.packs} 
-                                  onChange={(e) => updatePacks(item.batch_id, parseInt(e.target.value) || 0)}
+                                  onChange={(e) => updatePacks(item.cart_id, parseInt(e.target.value) || 0)}
                                   className="w-11 h-8 text-center p-1 bg-slate-950 border-slate-700 text-white font-semibold"
                                 />
                                 <span className="text-[8.5px] text-slate-500 font-medium mt-0.5">Packs</span>
@@ -1000,17 +1031,17 @@ export default function POS() {
                               <div className="flex flex-col items-center">
                                 <Input 
                                   type="number" 
-                                  min="0"
+                                  min="0" 
                                   max={item.tablets_per_pack - 1}
                                   value={item.loose_tablets} 
-                                  onChange={(e) => updateLooseTablets(item.batch_id, parseInt(e.target.value) || 0)}
+                                  onChange={(e) => updateLooseTablets(item.cart_id, parseInt(e.target.value) || 0)}
                                   className="w-11 h-8 text-center p-1 bg-slate-950 border-slate-700 text-white font-semibold"
                                 />
-                                <span className="text-[8.5px] text-slate-500 font-medium mt-0.5">Tabs</span>
+                                <span className="text-[8.5px] text-slate-500 font-medium mt-0.5">{item.unit_label === "caps" ? "Caps" : "Tabs"}</span>
                               </div>
                             </div>
                             <button 
-                              onClick={() => toggleLoose(item.batch_id)} 
+                              onClick={() => toggleLoose(item.cart_id)} 
                               className="text-[9.5px] text-indigo-400 hover:text-indigo-300 font-semibold underline mt-0.5"
                             >
                               Switch to Pack
@@ -1023,15 +1054,15 @@ export default function POS() {
                               min="1" 
                               max={Math.floor(item.max_qty)}
                               value={item.quantity} 
-                              onChange={(e) => updateQuantity(item.batch_id, parseInt(e.target.value) || 1)}
+                              onChange={(e) => updateQuantity(item.cart_id, parseInt(e.target.value) || 1)}
                               className="w-16 h-8 text-center p-1 bg-slate-950 border-slate-700 text-white mx-auto font-semibold"
                             />
-                            {item.tablets_per_pack > 1 && (
+                            {item.can_sell_loose && item.tablets_per_pack > 1 && (
                               <button 
-                                onClick={() => toggleLoose(item.batch_id)} 
+                                onClick={() => toggleLoose(item.cart_id)} 
                                 className="text-[9.5px] text-indigo-400 hover:text-indigo-300 font-semibold underline"
                               >
-                                Sell Loose Tabs
+                                Sell Loose {item.unit_label === "caps" ? "Caps" : "Tabs"}
                               </button>
                             )}
                           </div>
@@ -1040,7 +1071,7 @@ export default function POS() {
                       <TableCell className="text-slate-300 font-mono">
                         {item.is_loose ? (
                           <div className="flex flex-col text-xs">
-                            <span className="text-slate-200">₹{(item.unit_price / item.tablets_per_pack).toFixed(2)}/tab</span>
+                            <span className="text-slate-200">₹{(item.unit_price / (item.tablets_per_pack || 1)).toFixed(2)}/{item.unit_label === "caps" ? "cap" : "tab"}</span>
                             <span className="text-[9px] text-slate-500">₹{item.unit_price.toFixed(2)}/pk</span>
                           </div>
                         ) : (
@@ -1053,7 +1084,7 @@ export default function POS() {
                           variant="ghost" 
                           size="icon" 
                           className="text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 h-8 w-8" 
-                          onClick={() => removeFromCart(item.batch_id)}
+                          onClick={() => removeFromCart(item.cart_id)}
                         >
                           <Trash2 size={16} />
                         </Button>

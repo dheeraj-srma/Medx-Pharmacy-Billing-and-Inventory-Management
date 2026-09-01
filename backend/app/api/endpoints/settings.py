@@ -11,8 +11,12 @@ from app.core.config import settings as app_settings
 import os
 import shutil
 import glob
+import json
+from decimal import Decimal
+from datetime import datetime, date, timezone
 from app.core.timezone import IST
-from datetime import datetime, timezone
+from app.database.database import engine
+from sqlalchemy import inspect
 
 router = APIRouter()
 
@@ -90,22 +94,40 @@ def create_database_backup(
         os.makedirs(BACKUP_DIR, exist_ok=True)
         timestamp = datetime.now(IST).strftime("%Y%m%d-%H%M%S")
         
-        # In PostgreSQL/Supabase production environment
+        # PostgreSQL / Managed Storage: full JSON table data dump
         if "sqlite" not in app_settings.SQLALCHEMY_DATABASE_URI:
-            backup_filename = f"backup-cloud-metadata-{timestamp}.json"
+            backup_filename = f"backup-{timestamp}.json"
             dest_path = os.path.join(BACKUP_DIR, backup_filename)
-            import json
-            backup_info = {
-                "timestamp": datetime.now(IST).isoformat(),
-                "created_by": current_admin.email,
-                "provider": "PostgreSQL / Supabase Managed Storage",
-                "status": "Managed cloud backup active with Point-in-Time Recovery",
+            
+            insp = inspect(engine)
+            backup_payload = {
+                "metadata": {
+                    "backup_timestamp": datetime.now(IST).isoformat(),
+                    "timezone": "Asia/Kolkata (IST)",
+                    "created_by": current_admin.email,
+                    "database_engine": "PostgreSQL",
+                    "version": "1.0"
+                },
+                "tables": {}
             }
-            with open(dest_path, "w") as f:
-                json.dump(backup_info, f, indent=2)
+            
+            def default_serializer(obj):
+                if isinstance(obj, (date, datetime)):
+                    return obj.isoformat()
+                if isinstance(obj, Decimal):
+                    return str(obj)
+                return str(obj)
+
+            with engine.connect() as conn:
+                for table_name in insp.get_table_names():
+                    rows = conn.execute(text(f'SELECT * FROM "{table_name}"')).mappings().all()
+                    backup_payload["tables"][table_name] = [dict(r) for r in rows]
+            
+            with open(dest_path, "w", encoding="utf-8") as f:
+                json.dump(backup_payload, f, default=default_serializer, indent=2)
                 
             return {
-                "message": "Cloud backup checkpoint verified successfully",
+                "message": "Database backup created successfully",
                 "filename": backup_filename,
                 "size_bytes": os.path.getsize(dest_path)
             }
@@ -133,9 +155,12 @@ def list_backups(
 ):
     try:
         os.makedirs(BACKUP_DIR, exist_ok=True)
-        files = glob.glob(os.path.join(BACKUP_DIR, "backup-*.db"))
+        # Search for all backup files (.json, .db, .sql, etc.)
+        files = glob.glob(os.path.join(BACKUP_DIR, "backup-*"))
         backups_list = []
         for f in files:
+            if not os.path.isfile(f):
+                continue
             stat = os.stat(f)
             backups_list.append({
                 "filename": os.path.basename(f),

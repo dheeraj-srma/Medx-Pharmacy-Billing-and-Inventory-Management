@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Search, Sliders } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatDateDDMMYYYY } from "@/lib/utils";
 
 export default function InventoryList() {
   const { showAlert } = useModal();
@@ -226,7 +227,7 @@ export default function InventoryList() {
                       </TableCell>
                       <TableCell className="font-mono text-sm text-slate-300">{batch.batch_number || "N/A"}</TableCell>
                       <TableCell className="text-slate-300">
-                        {new Date(batch.expiry_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                        {formatDateDDMMYYYY(batch.expiry_date)}
                       </TableCell>
                       <TableCell className="font-semibold text-slate-200">{batch.quantity_available}</TableCell>
                       <TableCell>
@@ -282,7 +283,7 @@ export default function InventoryList() {
                   transactions.map((txn) => (
                     <TableRow key={txn.id} className="border-slate-800 hover:bg-slate-800/50">
                       <TableCell className="text-xs text-slate-400">
-                        {new Date(txn.timestamp).toLocaleString()}
+                        {formatDateDDMMYYYY(txn.timestamp, true)}
                       </TableCell>
                       <TableCell className="font-semibold text-slate-300">{txn.product_name}</TableCell>
                       <TableCell className="font-mono text-xs text-slate-400">{txn.batch_number || "N/A"}</TableCell>

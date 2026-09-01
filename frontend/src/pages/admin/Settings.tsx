@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { formatDateDDMMYYYY } from "@/lib/utils";
 
 export default function Settings() {
   const { showAlert, showConfirm } = useModal();
@@ -151,6 +152,12 @@ export default function Settings() {
       fetchSettings(selectedSettingsBranchId);
     }
   }, [selectedSettingsBranchId]);
+
+  useEffect(() => {
+    if (activeTab === "system_prefs") {
+      fetchBackups();
+    }
+  }, [activeTab]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setStoreConfig({ ...storeConfig, [e.target.name]: e.target.value });
@@ -305,7 +312,7 @@ export default function Settings() {
     try {
       const res = await api.post("/settings/backup");
       showAlert("Success", `Backup created successfully: ${res.data.filename}`);
-      fetchBackups();
+      await fetchBackups();
     } catch (error) {
       console.error("Failed to create database backup", error);
       showAlert("Error", "Backup creation failed.");
@@ -337,7 +344,7 @@ export default function Settings() {
     try {
       await api.delete(`/settings/backups/${filename}`);
       showAlert("Success", "Backup deleted successfully.");
-      fetchBackups();
+      await fetchBackups();
     } catch (error) {
       console.error("Failed to delete backup", error);
       showAlert("Error", "Delete failed.");
@@ -646,7 +653,7 @@ export default function Settings() {
                       <Database className="text-indigo-400" size={20} />
                       Database Backups
                     </CardTitle>
-                    <CardDescription className="text-slate-400">Save and download backup copies of your SQLite database store.</CardDescription>
+                    <CardDescription className="text-slate-400">Save and download backup copies of your database store.</CardDescription>
                   </div>
                   <Button onClick={handleCreateBackup} disabled={isBackingUp} className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2">
                     <RefreshCw className={isBackingUp ? "animate-spin" : ""} size={16} /> 
@@ -660,7 +667,7 @@ export default function Settings() {
                         <TableRow className="border-slate-800">
                           <TableHead className="text-slate-400 font-medium">Backup Filename</TableHead>
                           <TableHead className="text-slate-400 font-medium">File Size</TableHead>
-                          <TableHead className="text-slate-400 font-medium">Created Time (UTC)</TableHead>
+                          <TableHead className="text-slate-400 font-medium">Created Time (IST)</TableHead>
                           <TableHead className="text-right text-slate-400 font-medium">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -674,7 +681,7 @@ export default function Settings() {
                             <TableRow key={b.filename} className="border-slate-800/60 hover:bg-slate-900/20">
                               <TableCell className="text-white font-mono text-sm">{b.filename}</TableCell>
                               <TableCell className="text-slate-300 text-sm">{(b.size_bytes / 1024).toFixed(1)} KB</TableCell>
-                              <TableCell className="text-slate-300 text-sm">{new Date(b.created_at).toLocaleString()}</TableCell>
+                              <TableCell className="text-slate-300 text-sm">{formatDateDDMMYYYY(b.created_at, true)}</TableCell>
                               <TableCell className="text-right">
                                 <div className="flex justify-end gap-2">
                                   <Tooltip>

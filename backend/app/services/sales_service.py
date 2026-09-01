@@ -57,7 +57,7 @@ class SalesService:
                 if not product:
                     raise ValueError(f"Product ID {req_item.product_id} not found or inactive.")
 
-                requested_qty = req_item.quantity
+                requested_qty = Decimal(str(req_item.quantity))
                 gst_percentage = Decimal(str(product.gst_percentage or "0.00"))
                 gst_rate = gst_percentage / Decimal("100.0")
 
@@ -76,16 +76,18 @@ class SalesService:
                         raise ValueError(f"Batch {batch.batch_number} for {product.name} is expired.")
                     if batch.is_placeholder_expiry:
                         raise ValueError(f"Batch {batch.batch_number} has an unresolved expiry date and cannot be sold.")
-                    if batch.quantity_available < requested_qty:
+                    
+                    batch_avail = Decimal(str(batch.quantity_available))
+                    if batch_avail < requested_qty:
                         raise ValueError(
                             f"Insufficient stock for {product.name} (Batch {batch.batch_number}). "
-                            f"Available: {batch.quantity_available}, Requested: {requested_qty}"
+                            f"Available: {batch_avail}, Requested: {requested_qty}"
                         )
 
-                    batch.quantity_available -= requested_qty
+                    batch.quantity_available = float(batch_avail - requested_qty)
                     unit_price = round_money(Decimal(str(batch.selling_price)))
                     item_discount = round_money(Decimal(str(req_item.discount or "0.00")))
-                    gross_line = round_money(unit_price * Decimal(requested_qty))
+                    gross_line = round_money(unit_price * requested_qty)
                     net_line = max(Decimal("0.00"), gross_line - item_discount)
                     line_tax = round_money(net_line * gst_rate)
 
@@ -115,7 +117,7 @@ class SalesService:
                         InventoryBatch.id.asc()
                     ).with_for_update().all()
 
-                    total_available = sum(b.quantity_available for b in candidate_batches)
+                    total_available = sum(Decimal(str(b.quantity_available)) for b in candidate_batches)
                     if total_available < requested_qty:
                         raise ValueError(
                             f"Insufficient stock for '{product.name}'. "
@@ -124,16 +126,17 @@ class SalesService:
 
                     remaining_needed = requested_qty
                     for batch in candidate_batches:
-                        if remaining_needed <= 0:
+                        if remaining_needed <= Decimal("0.00"):
                             break
-                        take = min(batch.quantity_available, remaining_needed)
-                        batch.quantity_available -= take
+                        batch_avail = Decimal(str(batch.quantity_available))
+                        take = min(batch_avail, remaining_needed)
+                        batch.quantity_available = float(batch_avail - take)
                         remaining_needed -= take
 
                         unit_price = round_money(Decimal(str(batch.selling_price)))
                         # Pro-rate discount if any
-                        item_discount = round_money(Decimal(str(req_item.discount or "0.00")) * (Decimal(take) / Decimal(requested_qty)))
-                        gross_line = round_money(unit_price * Decimal(take))
+                        item_discount = round_money(Decimal(str(req_item.discount or "0.00")) * (take / requested_qty))
+                        gross_line = round_money(unit_price * take)
                         net_line = max(Decimal("0.00"), gross_line - item_discount)
                         line_tax = round_money(net_line * gst_rate)
 
@@ -287,7 +290,7 @@ class SalesService:
             if not product:
                 continue
 
-            requested_qty = req_item.quantity
+            requested_qty = Decimal(str(req_item.quantity))
             gst_percentage = Decimal(str(product.gst_percentage or "0.00"))
             gst_rate = gst_percentage / Decimal("100.0")
 
@@ -304,14 +307,15 @@ class SalesService:
 
             remaining = requested_qty
             for batch in batches:
-                if remaining <= 0:
+                if remaining <= Decimal("0.00"):
                     break
-                take = min(batch.quantity_available, remaining)
+                batch_avail = Decimal(str(batch.quantity_available))
+                take = min(batch_avail, remaining)
                 remaining -= take
 
                 unit_price = round_money(Decimal(str(batch.selling_price)))
-                item_discount = round_money(Decimal(str(req_item.discount or "0.00")) * (Decimal(take) / Decimal(requested_qty)))
-                gross_line = round_money(unit_price * Decimal(take))
+                item_discount = round_money(Decimal(str(req_item.discount or "0.00")) * (take / requested_qty))
+                gross_line = round_money(unit_price * take)
                 net_line = max(Decimal("0.00"), gross_line - item_discount)
                 line_tax = round_money(net_line * gst_rate)
 

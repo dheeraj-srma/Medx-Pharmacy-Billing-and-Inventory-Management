@@ -151,3 +151,75 @@ class TestFEFOAndSales:
 
         finally:
             db.close()
+
+    def test_fractional_quantity_sale_for_loose_tablets(self):
+        """
+        Verify that fractional quantities (e.g. 0.5 packs for 5 loose tablets out of 10)
+        are accepted by schema validation, processed accurately by SalesService, and deducted from inventory.
+        """
+        db = SessionLocal()
+        try:
+            import time
+            test_user = db.query(User).filter(User.email == "test_staff_b1@medx.com").first()
+            
+            test_prod = Product(
+                name="Test Paracetamol 500mg Strip",
+                brand="Test Pharma",
+                sku=f"TAB-LOOSE-{int(time.time())}",
+                mrp=Decimal("50.00"),
+                selling_price=Decimal("40.00"),
+                gst_percentage=Decimal("12.00"),
+                is_active=True
+            )
+            db.add(test_prod)
+            db.commit()
+            db.refresh(test_prod)
+
+            today = date.today()
+            batch = InventoryBatch(
+                product_id=test_prod.id,
+                batch_number="BATCH-LOOSE-TEST",
+                expiry_date=today + timedelta(days=180),
+                quantity_available=10.0,
+                purchase_price=Decimal("25.00"),
+                mrp=Decimal("50.00"),
+                selling_price=Decimal("40.00"),
+                branch_id=1,
+                is_placeholder_expiry=False
+            )
+            db.add(batch)
+            db.commit()
+            db.refresh(batch)
+
+            # Customer buys 0.5 packs (5 tablets out of 10)
+            sale_in = SaleCreate(
+                items=[
+                    SaleItemCreate(
+                        product_id=test_prod.id,
+                        batch_id=batch.id,
+                        quantity=Decimal("0.5")
+                    )
+                ],
+                branch_id=1,
+                payment_method="CASH"
+            )
+
+            sale = SalesService.create_sale(db, sale_in, test_user)
+
+            # Subtotal: 0.5 * 40.00 = 20.00
+            # GST: 12% of 20.00 = 2.40
+            # Grand Total: 22.40 -> Round off +0.60 -> 23.00 (ROUND_HALF_UP) or 22.40 unrounded
+            assert sale.total_amount == Decimal("20.00")
+            assert sale.tax_amount == Decimal("2.40")
+            assert sale.grand_total == Decimal("22.00") # 22.40 rounds to 22.00
+
+            db.refresh(batch)
+            # 10.0 - 0.5 = 9.5 available
+            assert float(batch.quantity_available) == 9.5
+
+            assert len(sale.items) == 1
+            assert Decimal(str(sale.items[0].quantity)) == Decimal("0.5")
+
+        finally:
+            db.close()
+

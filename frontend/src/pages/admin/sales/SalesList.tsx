@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Search } from "lucide-react";
+import { formatDateDDMMYYYY } from "@/lib/utils";
 
 export default function SalesList() {
   const { sales, fetchSales } = useDataStore();
@@ -70,7 +71,7 @@ export default function SalesList() {
                 <TableRow key={sale.id} className="border-slate-800 hover:bg-slate-800/50">
                   <TableCell className="font-mono text-sm font-medium text-slate-300">{sale.invoice_number}</TableCell>
                   <TableCell className="text-sm text-slate-300">
-                    {new Date(sale.sale_date).toLocaleString()}
+                    {formatDateDDMMYYYY(sale.sale_date, true)}
                   </TableCell>
                   <TableCell className="text-slate-300">{sale.customer?.name || "Walk-in"}</TableCell>
                   <TableCell className="text-slate-300">{sale.payment_method}</TableCell>

@@ -26,7 +26,7 @@ class PaymentResponse(BaseModel):
 
 class SaleItemCreate(BaseModel):
     product_id: int
-    quantity: int = Field(..., gt=0) # In smallest sellable units
+    quantity: Decimal = Field(..., gt=0) # Supports fractional quantities for loose tablet dispensing
     batch_id: Optional[int] = None   # If omitted, backend allocates via FEFO
     unit_price: Optional[Decimal] = None # Calculated authoritatively by backend
     discount: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0)
@@ -38,7 +38,7 @@ class SaleItemResponse(BaseModel):
     sale_id: int
     product_id: int
     batch_id: int
-    quantity: int
+    quantity: Decimal
     unit_price: Decimal
     discount: Decimal
     total_price: Decimal
