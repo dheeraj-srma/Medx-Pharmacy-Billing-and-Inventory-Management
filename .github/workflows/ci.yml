@@ -25,6 +25,8 @@ jobs:
           pip install -r backend/requirements.txt
 
       - name: Run Backend Tests
+        env:
+          DATABASE_URL: sqlite:///./test_ci.db
         run: |
           cd backend
           pytest -v
