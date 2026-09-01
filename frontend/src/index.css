@@ -164,3 +164,16 @@ body:has([data-modal-overlay="true"]) header {
 aside, header {
   transition: filter 0.25s ease-in-out;
 }
+
+/* Prevent background page scrolling when ANY modal is open */
+body.modal-open,
+body.dashboard-modal-open,
+body:has([data-modal-overlay="true"]) {
+  overflow: hidden !important;
+}
+
+body.modal-open main,
+body.dashboard-modal-open main,
+body:has([data-modal-overlay="true"]) main {
+  overflow: hidden !important;
+}

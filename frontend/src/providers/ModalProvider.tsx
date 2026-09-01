@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { CheckCircle2, XCircle, AlertTriangle, Info, HelpCircle } from 'lucide-react';
 
 interface ModalContextType {
-  showAlert: (title: string, message?: string) => Promise<void>;
-  showConfirm: (title: string, message?: string) => Promise<boolean>;
+  showAlert: (title: string, message?: any) => Promise<void>;
+  showConfirm: (title: string, message?: any) => Promise<boolean>;
 }
 
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
@@ -23,14 +23,33 @@ interface ModalState {
   isOpen: boolean;
   type: 'alert' | 'confirm';
   title: string;
-  message?: string;
+  message?: any;
   resolve: (value: boolean | PromiseLike<boolean>) => void;
 }
+
+const renderMessage = (msg: any): string => {
+  if (!msg) return '';
+  if (typeof msg === 'string') return msg;
+  if (Array.isArray(msg)) {
+    return msg
+      .map((item: any) => {
+        if (typeof item === 'object' && item !== null) {
+          return item.msg || item.message || JSON.stringify(item);
+        }
+        return String(item);
+      })
+      .join(', ');
+  }
+  if (typeof msg === 'object') {
+    return msg.msg || msg.message || msg.detail || JSON.stringify(msg);
+  }
+  return String(msg);
+};
 
 export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [modalState, setModalState] = useState<ModalState | null>(null);
 
-  const showAlert = (title: string, message?: string): Promise<void> => {
+  const showAlert = (title: string, message?: any): Promise<void> => {
     return new Promise((resolve) => {
       setModalState({
         isOpen: true,
@@ -42,7 +61,7 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     });
   };
 
-  const showConfirm = (title: string, message?: string): Promise<boolean> => {
+  const showConfirm = (title: string, message?: any): Promise<boolean> => {
     return new Promise((resolve) => {
       setModalState({
         isOpen: true,
@@ -77,7 +96,7 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         (() => {
           const { Icon, color, bg } = getIconAndColor();
           return (
-            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/60 dark:bg-black/60 backdrop-blur-sm">
+            <div data-modal-overlay="true" className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/60 dark:bg-black/60 backdrop-blur-sm">
               <div className="w-full max-w-[360px] overflow-hidden rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white backdrop-blur-xl animate-in zoom-in-95 fade-in duration-200">
               <div className="p-6">
                 <div className="flex gap-4 items-start">
@@ -88,7 +107,7 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                     <h3 className="text-base font-semibold tracking-tight">{modalState.title}</h3>
                     {modalState.message && (
                       <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
-                        {modalState.message}
+                        {renderMessage(modalState.message)}
                       </p>
                     )}
                   </div>

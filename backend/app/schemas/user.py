@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from app.models.user import RoleEnum
 
 class BranchInfo(BaseModel):
@@ -19,6 +19,16 @@ class UserBase(BaseModel):
     is_active: bool = True
     role: RoleEnum = RoleEnum.STAFF
     branch_id: int | None = None
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def normalize_role(cls, v):
+        if isinstance(v, str):
+            v_lower = v.lower().strip()
+            for r in RoleEnum:
+                if r.value == v_lower or r.name.lower() == v_lower:
+                    return r
+        return v
 
 class UserCreate(UserBase):
     password: str
@@ -46,6 +56,16 @@ class UserUpdate(BaseModel):
     role: RoleEnum | None = None
     is_active: bool | None = None
     branch_id: int | None = None
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def normalize_role(cls, v):
+        if v is not None and isinstance(v, str):
+            v_lower = v.lower().strip()
+            for r in RoleEnum:
+                if r.value == v_lower or r.name.lower() == v_lower:
+                    return r
+        return v
 
 class AdminPasswordReset(BaseModel):
     password: str

@@ -79,6 +79,18 @@ export default function Settings() {
   const [resetPassword, setResetPassword] = useState("");
   const [showResetPasswordModal, setShowResetPasswordModal] = useState<any | null>(null);
 
+  useEffect(() => {
+    const isAnyModalOpen = Boolean(showAddUser || showEditUser || showResetPasswordModal || showExpandedUsersTable);
+    if (isAnyModalOpen) {
+      document.body.classList.add("modal-open");
+    } else {
+      document.body.classList.remove("modal-open");
+    }
+    return () => {
+      document.body.classList.remove("modal-open");
+    };
+  }, [showAddUser, showEditUser, showResetPasswordModal, showExpandedUsersTable]);
+
   // System Preferences / Backups state
   const [backups, setBackups] = useState<any[]>([]);
   const [isBackingUp, setIsBackingUp] = useState(false);
@@ -176,6 +188,20 @@ export default function Settings() {
     }
   };
 
+  const getErrorMessage = (error: any, fallback: string): string => {
+    const detail = error?.response?.data?.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      return detail
+        .map((d: any) => d.msg || d.message || JSON.stringify(d))
+        .join(", ");
+    }
+    if (detail && typeof detail === "object") {
+      return detail.msg || detail.message || JSON.stringify(detail);
+    }
+    return error?.message || fallback;
+  };
+
   // User Actions
   const handleAddUser = async () => {
     if (!newUser.email || !newUser.password || !newUser.full_name) {
@@ -183,8 +209,11 @@ export default function Settings() {
       return;
     }
     try {
-      const payload = { ...newUser };
-      if (payload.role !== "STAFF") {
+      const payload: any = { 
+        ...newUser,
+        role: (newUser.role || "STAFF").toLowerCase()
+      };
+      if (payload.role !== "staff") {
         delete payload.branch_id;
       }
       await api.post("/auth/register", payload);
@@ -194,7 +223,7 @@ export default function Settings() {
       fetchUsers();
     } catch (error: any) {
       console.error("Failed to register staff", error);
-      showAlert("Error", error.response?.data?.detail || "Registration failed");
+      showAlert("Error", getErrorMessage(error, "Registration failed"));
     }
   };
 
@@ -202,7 +231,7 @@ export default function Settings() {
     setShowEditUser(user);
     setEditUserForm({
       full_name: user.full_name || "",
-      role: user.role,
+      role: (user.role || "STAFF").toUpperCase(),
       is_active: user.is_active,
       branch_id: user.branch_id || 1
     });
@@ -211,8 +240,11 @@ export default function Settings() {
   const handleSaveEditUser = async () => {
     if (!showEditUser) return;
     try {
-      const payload = { ...editUserForm };
-      if (payload.role !== "STAFF") {
+      const payload: any = { 
+        ...editUserForm,
+        role: (editUserForm.role || "STAFF").toLowerCase()
+      };
+      if (payload.role !== "staff") {
         payload.branch_id = null;
       }
       await api.put(`/auth/users/${showEditUser.id}`, payload);
@@ -221,7 +253,7 @@ export default function Settings() {
       fetchUsers();
     } catch (error: any) {
       console.error("Failed to update user", error);
-      showAlert("Error", error.response?.data?.detail || "Failed to update user");
+      showAlert("Error", getErrorMessage(error, "Failed to update user"));
     }
   };
 
@@ -541,11 +573,11 @@ export default function Settings() {
                             <TableCell className="text-slate-300 font-mono text-sm">{user.email}</TableCell>
                             <TableCell>
                               <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                                user.role === "ADMIN" 
+                                user.role?.toUpperCase() === "ADMIN" 
                                   ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25" 
                                   : "bg-slate-500/10 text-slate-400 border border-slate-500/25"
                               }`}>
-                                {user.role}
+                                {user.role?.toUpperCase()}
                               </span>
                             </TableCell>
                             <TableCell>
@@ -725,9 +757,9 @@ export default function Settings() {
 
       {/* Overlay Modal: Register Staff */}
       {showAddUser && createPortal(
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl">
-            <CardHeader className="border-b border-slate-800 pb-4">
+        <div data-modal-overlay="true" className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl my-auto max-h-[90vh] flex flex-col overflow-hidden">
+            <CardHeader className="border-b border-slate-800 pb-4 shrink-0">
               <CardTitle className="text-white text-lg flex items-center gap-2">
                 <UserPlus size={20} className="text-indigo-400" />
                 Register Staff Member
@@ -736,7 +768,7 @@ export default function Settings() {
                 Create a new active profile. Staff members can login and log sales.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 pt-4">
+            <CardContent className="space-y-4 pt-4 overflow-y-auto flex-1">
               <div className="space-y-2">
                 <Label htmlFor="regName" className="text-slate-300">Full Name</Label>
                 <Input 
@@ -804,11 +836,15 @@ export default function Settings() {
                 </div>
               )}
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
-                <Button variant="outline" onClick={() => setShowAddUser(false)} className="bg-slate-950 border-slate-800 text-slate-300">
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800 shrink-0">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowAddUser(false)} 
+                  className="border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm"
+                >
                   Cancel
                 </Button>
-                <Button onClick={handleAddUser} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                <Button onClick={handleAddUser} className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-md shadow-indigo-600/20">
                   Register User
                 </Button>
               </div>
@@ -820,9 +856,9 @@ export default function Settings() {
 
       {/* Overlay Modal: Edit Staff Member */}
       {showEditUser && createPortal(
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl">
-            <CardHeader className="border-b border-slate-800 pb-4">
+        <div data-modal-overlay="true" className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl my-auto max-h-[90vh] flex flex-col overflow-hidden">
+            <CardHeader className="border-b border-slate-800 pb-4 shrink-0">
               <CardTitle className="text-white text-lg flex items-center gap-2">
                 <Edit2 size={20} className="text-indigo-400" />
                 Edit Staff Member
@@ -831,7 +867,7 @@ export default function Settings() {
                 Editing: <span className="text-white font-mono text-xs">{showEditUser.email}</span>
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 pt-4">
+            <CardContent className="space-y-4 pt-4 overflow-y-auto flex-1">
               <div className="space-y-2">
                 <Label htmlFor="editName" className="text-slate-300">Full Name</Label>
                 <Input 
@@ -887,11 +923,15 @@ export default function Settings() {
                 </div>
               )}
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
-                <Button variant="outline" onClick={() => setShowEditUser(null)} className="bg-slate-950 border-slate-800 text-slate-300">
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800 shrink-0">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowEditUser(null)} 
+                  className="border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm"
+                >
                   Cancel
                 </Button>
-                <Button onClick={handleSaveEditUser} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                <Button onClick={handleSaveEditUser} className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-md shadow-indigo-600/20">
                   Save Changes
                 </Button>
               </div>
@@ -903,9 +943,9 @@ export default function Settings() {
 
       {/* Overlay Modal: Reset Password */}
       {showResetPasswordModal && createPortal(
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl">
-            <CardHeader className="border-b border-slate-800 pb-4">
+        <div data-modal-overlay="true" className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-2xl my-auto max-h-[90vh] flex flex-col overflow-hidden">
+            <CardHeader className="border-b border-slate-800 pb-4 shrink-0">
               <CardTitle className="text-white text-lg flex items-center gap-2">
                 <Key size={20} className="text-indigo-400" />
                 Reset Password
@@ -914,7 +954,7 @@ export default function Settings() {
                 User: <span className="text-white font-mono text-xs">{showResetPasswordModal.email}</span>
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 pt-4">
+            <CardContent className="space-y-4 pt-4 overflow-y-auto flex-1">
               <div className="space-y-2">
                 <Label htmlFor="resetPasswordInput" className="text-slate-300">New Password</Label>
                 <Input 
@@ -927,11 +967,15 @@ export default function Settings() {
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
-                <Button variant="outline" onClick={() => setShowResetPasswordModal(null)} className="bg-slate-950 border-slate-800 text-slate-300">
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800 shrink-0">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowResetPasswordModal(null)} 
+                  className="border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm"
+                >
                   Cancel
                 </Button>
-                <Button onClick={handleResetPassword} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                <Button onClick={handleResetPassword} className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-md shadow-indigo-600/20">
                   Reset Password
                 </Button>
               </div>
@@ -943,7 +987,7 @@ export default function Settings() {
 
       {/* Overlay Modal: Expanded Users Table */}
       {showExpandedUsersTable && createPortal(
-        <div className="fixed inset-0 z-[100] flex flex-col bg-black/80 backdrop-blur-md p-6 sm:p-12 animate-in fade-in duration-200">
+        <div data-modal-overlay="true" className="fixed inset-0 z-[100] flex flex-col bg-black/80 backdrop-blur-md p-6 sm:p-12 animate-in fade-in duration-200">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-bold text-white">
               Users and roles
@@ -982,11 +1026,11 @@ export default function Settings() {
                       <TableCell className="text-slate-300 font-mono text-sm py-4">{user.email}</TableCell>
                       <TableCell className="py-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          user.role === "ADMIN" 
+                          user.role?.toUpperCase() === "ADMIN" 
                             ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25" 
                             : "bg-slate-500/10 text-slate-400 border border-slate-500/25"
                         }`}>
-                          {user.role}
+                          {user.role?.toUpperCase()}
                         </span>
                       </TableCell>
                       <TableCell className="py-4">
