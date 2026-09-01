@@ -64,7 +64,34 @@ class TestReturnsModule:
         self.sale = SalesService.create_sale(self.db, sale_req, self.user)
 
         yield
-        self.db.close()
+        # Teardown: Clean up test returns, sales, transactions, batch, product, and user
+        try:
+            from app.models.returns import Return, ReturnItem
+            from app.models.sale import Sale, SaleItem
+            from app.models.payment import Payment
+            from app.models.inventory import InventoryTransaction
+            from app.models.audit_log import AuditLog
+            returns = self.db.query(Return).filter(Return.created_by == self.user.id).all()
+            ret_ids = [r.id for r in returns]
+            if ret_ids:
+                self.db.query(ReturnItem).filter(ReturnItem.return_id.in_(ret_ids)).delete(synchronize_session=False)
+                self.db.query(Return).filter(Return.id.in_(ret_ids)).delete(synchronize_session=False)
+            sales = self.db.query(Sale).filter(Sale.created_by == self.user.id).all()
+            sale_ids = [s.id for s in sales]
+            if sale_ids:
+                self.db.query(Payment).filter(Payment.sale_id.in_(sale_ids)).delete(synchronize_session=False)
+                self.db.query(SaleItem).filter(SaleItem.sale_id.in_(sale_ids)).delete(synchronize_session=False)
+                self.db.query(Sale).filter(Sale.id.in_(sale_ids)).delete(synchronize_session=False)
+            self.db.query(InventoryTransaction).filter(InventoryTransaction.product_id == self.prod.id).delete(synchronize_session=False)
+            self.db.query(AuditLog).filter(AuditLog.user_id == self.user.id).delete(synchronize_session=False)
+            self.db.query(InventoryBatch).filter(InventoryBatch.id == self.batch.id).delete(synchronize_session=False)
+            self.db.query(Product).filter(Product.id == self.prod.id).delete(synchronize_session=False)
+            self.db.query(User).filter(User.id == self.user.id).delete(synchronize_session=False)
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+        finally:
+            self.db.close()
 
     def test_partial_return_restores_stock_and_creates_transaction(self):
         sale_item = self.sale.items[0]

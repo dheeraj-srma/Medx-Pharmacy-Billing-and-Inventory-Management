@@ -150,7 +150,26 @@ class TestFEFOAndSales:
             assert sale.payments[0].amount == Decimal("1165.00")
 
         finally:
-            db.close()
+            try:
+                from app.models.sale import Sale, SaleItem
+                from app.models.payment import Payment
+                from app.models.audit_log import AuditLog
+                sales = db.query(Sale).filter(Sale.created_by == test_user.id).all()
+                s_ids = [s.id for s in sales]
+                if s_ids:
+                    db.query(Payment).filter(Payment.sale_id.in_(s_ids)).delete(synchronize_session=False)
+                    db.query(SaleItem).filter(SaleItem.sale_id.in_(s_ids)).delete(synchronize_session=False)
+                    db.query(Sale).filter(Sale.id.in_(s_ids)).delete(synchronize_session=False)
+                db.query(InventoryTransaction).filter(InventoryTransaction.product_id == test_prod.id).delete(synchronize_session=False)
+                db.query(AuditLog).filter(AuditLog.user_id == test_user.id).delete(synchronize_session=False)
+                db.query(InventoryBatch).filter(InventoryBatch.product_id == test_prod.id).delete(synchronize_session=False)
+                db.query(Product).filter(Product.id == test_prod.id).delete(synchronize_session=False)
+                db.query(User).filter(User.id == test_user.id).delete(synchronize_session=False)
+                db.commit()
+            except Exception:
+                db.rollback()
+            finally:
+                db.close()
 
     def test_fractional_quantity_sale_for_loose_tablets(self):
         """
@@ -161,6 +180,18 @@ class TestFEFOAndSales:
         try:
             import time
             test_user = db.query(User).filter(User.email == "test_staff_b1@medx.com").first()
+            if not test_user:
+                test_user = User(
+                    email="test_staff_b1@medx.com",
+                    hashed_password="hash",
+                    full_name="Staff",
+                    role=RoleEnum.STAFF,
+                    branch_id=1,
+                    is_active=True
+                )
+                db.add(test_user)
+                db.commit()
+                db.refresh(test_user)
             
             test_prod = Product(
                 name="Test Paracetamol 500mg Strip",
@@ -221,5 +252,24 @@ class TestFEFOAndSales:
             assert Decimal(str(sale.items[0].quantity)) == Decimal("0.5")
 
         finally:
-            db.close()
+            try:
+                from app.models.sale import Sale, SaleItem
+                from app.models.payment import Payment
+                from app.models.audit_log import AuditLog
+                sales = db.query(Sale).filter(Sale.created_by == test_user.id).all()
+                s_ids = [s.id for s in sales]
+                if s_ids:
+                    db.query(Payment).filter(Payment.sale_id.in_(s_ids)).delete(synchronize_session=False)
+                    db.query(SaleItem).filter(SaleItem.sale_id.in_(s_ids)).delete(synchronize_session=False)
+                    db.query(Sale).filter(Sale.id.in_(s_ids)).delete(synchronize_session=False)
+                db.query(InventoryTransaction).filter(InventoryTransaction.product_id == test_prod.id).delete(synchronize_session=False)
+                db.query(AuditLog).filter(AuditLog.user_id == test_user.id).delete(synchronize_session=False)
+                db.query(InventoryBatch).filter(InventoryBatch.id == batch.id).delete(synchronize_session=False)
+                db.query(Product).filter(Product.id == test_prod.id).delete(synchronize_session=False)
+                db.query(User).filter(User.id == test_user.id).delete(synchronize_session=False)
+                db.commit()
+            except Exception:
+                db.rollback()
+            finally:
+                db.close()
 
