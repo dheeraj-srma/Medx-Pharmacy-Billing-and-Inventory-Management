@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 import pytest
 from app.database.database import engine, SessionLocal, Base
 import app.models  # Ensure all SQLAlchemy models are imported
