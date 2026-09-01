@@ -30,13 +30,32 @@ def create_issue_from_field_issue(
 ) -> DataIntegrityIssue:
     """
     Persist a FieldIssue as a DataIntegrityIssue record.
+    Prevents duplicate active (unresolved) issues for the same (entity_type, entity_id, field_name, issue_type).
     Must be called within an open transaction — caller commits.
     """
+    mapped_type = _map_issue_type(field_issue.issue_type)
+
+    # Check for existing active issue
+    existing = db.query(DataIntegrityIssue).filter(
+        DataIntegrityIssue.entity_type == entity_type,
+        DataIntegrityIssue.entity_id == entity_id,
+        DataIntegrityIssue.field_name == field_issue.field_name,
+        DataIntegrityIssue.issue_type == mapped_type,
+        DataIntegrityIssue.resolved_at == None,
+    ).first()
+
+    if existing:
+        existing.placeholder_value = field_issue.placeholder_value
+        existing.message = field_issue.message
+        if field_issue.original_value is not None:
+            existing.original_value = str(field_issue.original_value)
+        return existing
+
     issue = DataIntegrityIssue(
         entity_type=entity_type,
         entity_id=entity_id,
         field_name=field_issue.field_name,
-        issue_type=_map_issue_type(field_issue.issue_type),
+        issue_type=mapped_type,
         severity=_map_severity(field_issue.severity),
         placeholder_value=field_issue.placeholder_value,
         original_value=str(field_issue.original_value) if field_issue.original_value is not None else None,
@@ -98,13 +117,29 @@ def resolve_issue(
     db: Session,
     issue_id: int,
     resolved_by_user_id: int,
+    corrected_value: Optional[str] = None,
+    notes: Optional[str] = None,
 ) -> Optional[DataIntegrityIssue]:
-    """Mark a single issue as resolved. Returns None if not found."""
+    """Mark a single issue as resolved with optional correction metadata."""
     issue = db.query(DataIntegrityIssue).filter(DataIntegrityIssue.id == issue_id).first()
     if not issue:
         return None
     issue.resolved_at = datetime.now(IST)
     issue.resolved_by = resolved_by_user_id
+    if corrected_value or notes:
+        import json
+        meta = {}
+        if issue.metadata_json:
+            try:
+                meta = json.loads(issue.metadata_json)
+            except Exception:
+                meta = {"raw": issue.metadata_json}
+        if corrected_value:
+            meta["corrected_value"] = corrected_value
+        if notes:
+            meta["resolution_notes"] = notes
+        issue.metadata_json = json.dumps(meta)
+
     db.add(issue)
     return issue
 

@@ -1,7 +1,10 @@
+import logging
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
+
+logger = logging.getLogger("purchase_service")
 
 from app.core.timezone import IST
 from app.models.purchase import Purchase, PurchaseItem
@@ -173,6 +176,18 @@ class PurchaseService:
                 )
                 db.add(txn)
 
+            # Audit Log
+            from app.services.audit_service import AuditService
+            AuditService.log(
+                db=db,
+                action="PURCHASE_CREATED",
+                user_id=current_user.id,
+                branch_id=branch_id,
+                entity_type="purchase",
+                entity_id=purchase.id,
+                new_value={"invoice_number": purchase.invoice_number, "grand_total": str(grand_total), "items_count": len(validated_items)}
+            )
+
             db.commit()
             db.refresh(purchase)
             return purchase
@@ -184,7 +199,8 @@ class PurchaseService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
         except Exception as e:
             db.rollback()
+            logger.exception("Purchase transaction failed unexpectedly")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Inward stock transaction failed: {str(e)}"
+                detail="Inward stock transaction failed due to an internal error. Please try again or contact support."
             )

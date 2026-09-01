@@ -43,7 +43,7 @@ class PurchaseItem(Base):
     manufacturing_date = Column(Date, nullable=True)
     expiry_date = Column(Date, nullable=False)
     
-    quantity = Column(Integer, nullable=False) # In smallest sellable units
+    quantity = Column(Numeric(12, 4), nullable=False) # In smallest sellable units
     purchase_price = Column(Numeric(12, 2), nullable=False)
     mrp = Column(Numeric(12, 2), nullable=False)
     selling_price = Column(Numeric(12, 2), nullable=False)

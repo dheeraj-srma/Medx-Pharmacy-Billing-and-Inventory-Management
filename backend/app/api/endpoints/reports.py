@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Dict, Any, Optional
 from datetime import date, datetime, timedelta, timezone
+import logging
 from app.api import deps
 from app.models.sale import Sale, SaleItem
 from app.models.purchase import Purchase, PurchaseItem
@@ -10,6 +11,7 @@ from app.models.inventory import InventoryBatch
 from app.models.product import Product
 from app.models.user import RoleEnum
 
+logger = logging.getLogger("reports")
 router = APIRouter()
 
 @router.get("/sales")
@@ -82,7 +84,8 @@ def get_sales_report(
             "daily_summary": daily_list
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate sales report: {str(e)}")
+        logger.exception("Failed to generate sales report")
+        raise HTTPException(status_code=500, detail="Failed to generate sales report. Please try again or contact support.")
 
 @router.get("/purchases")
 def get_purchases_report(
@@ -135,7 +138,8 @@ def get_purchases_report(
             "daily_summary": daily_list
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate purchase report: {str(e)}")
+        logger.exception("Failed to generate purchase report")
+        raise HTTPException(status_code=500, detail="Failed to generate purchase report. Please try again or contact support.")
 
 @router.get("/inventory-valuation")
 def get_inventory_valuation(
@@ -203,4 +207,5 @@ def get_inventory_valuation(
             "expiring_soon_items": expiring_soon
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate inventory valuation: {str(e)}")
+        logger.exception("Failed to generate inventory valuation")
+        raise HTTPException(status_code=500, detail="Failed to generate inventory valuation. Please try again or contact support.")

@@ -171,7 +171,15 @@ export default function POS() {
   useEffect(() => {
     // Fetch available batches for the selected branch
     api.get("/inventory/active-batches", { params: { branch_id: selectedBranchId } })
-      .then(res => setActiveBatches(res.data))
+      .then(res => {
+        const normalized = (res.data || []).map((b: any) => ({
+          ...b,
+          quantity_available: Number(b.quantity_available) || 0,
+          mrp: Number(b.mrp) || 0,
+          selling_price: Number(b.selling_price) || 0,
+        }));
+        setActiveBatches(normalized);
+      })
       .catch(console.error);
   }, [selectedBranchId]);
 
@@ -315,10 +323,10 @@ export default function POS() {
         batch_number: batch.batch_number,
         expiry_date: batch.expiry_date,
         quantity: 1,
-        unit_price: batch.selling_price,
+        unit_price: Number(batch.selling_price) || 0,
         discount: 0,
-        total_price: batch.selling_price,
-        max_qty: batch.quantity_available,
+        total_price: Number(batch.selling_price) || 0,
+        max_qty: Number(batch.quantity_available) || 0,
         can_sell_loose: eligibility.canSellLoose,
         unit_label: eligibility.unitLabel,
         tablets_per_pack: eligibility.unitsPerPack,
@@ -610,7 +618,16 @@ export default function POS() {
       setMatchedCustomerId(null);
       
       // Refresh batches to reflect new quantities
-      api.get("/inventory/active-batches").then(r => setActiveBatches(r.data));
+      api.get("/inventory/active-batches", { params: { branch_id: selectedBranchId } })
+        .then(r => {
+          const normalized = (r.data || []).map((b: any) => ({
+            ...b,
+            quantity_available: Number(b.quantity_available) || 0,
+            mrp: Number(b.mrp) || 0,
+            selling_price: Number(b.selling_price) || 0,
+          }));
+          setActiveBatches(normalized);
+        });
       
     } catch (error: any) {
       console.error("Checkout failed", error);
@@ -940,15 +957,15 @@ export default function POS() {
                         </div>
 
                         <div className="text-right flex flex-col items-end gap-1">
-                          <div className="font-bold text-emerald-400 text-base">₹{batch.selling_price.toFixed(2)}</div>
+                          <div className="font-bold text-emerald-400 text-base">₹{Number(batch.selling_price || 0).toFixed(2)}</div>
                           <Badge 
                             variant="outline" 
-                            className={batch.quantity_available <= 10 
+                            className={Number(batch.quantity_available || 0) <= 10 
                               ? "bg-amber-500/10 text-amber-400 border-amber-500/20 text-[11px]" 
                               : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[11px]"
                             }
                           >
-                            {batch.quantity_available} in stock
+                            {Number(batch.quantity_available || 0)} in stock
                           </Badge>
                         </div>
                       </li>

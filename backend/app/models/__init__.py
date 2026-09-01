@@ -10,6 +10,8 @@ from app.models.payment import Payment, PaymentMethodEnum, PaymentStatusEnum
 from app.models.invoice_sequence import InvoiceSequence
 from app.models.settings import StoreSettings
 from app.models.data_integrity import DataIntegrityIssue
+from app.models.returns import Return, ReturnItem
+from app.models.audit_log import AuditLog
 
 __all__ = [
     "Branch",
@@ -30,5 +32,8 @@ __all__ = [
     "PaymentStatusEnum",
     "InvoiceSequence",
     "StoreSettings",
-    "DataIntegrityIssue"
+    "DataIntegrityIssue",
+    "Return",
+    "ReturnItem",
+    "AuditLog"
 ]

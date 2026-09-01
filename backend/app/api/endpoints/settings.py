@@ -3,20 +3,23 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Optional
-from app.api import deps
-from app.models.settings import StoreSettings
-from app.models.user import RoleEnum, User
-from app.schemas.settings import StoreSettingsResponse, StoreSettingsUpdate
-from app.core.config import settings as app_settings
+import logging
 import os
 import shutil
 import glob
 import json
 from decimal import Decimal
 from datetime import datetime, date, timezone
+from app.api import deps
+from app.models.settings import StoreSettings
+from app.models.user import RoleEnum, User
+from app.schemas.settings import StoreSettingsResponse, StoreSettingsUpdate
+from app.core.config import settings as app_settings
 from app.core.timezone import IST
 from app.database.database import engine
 from sqlalchemy import inspect
+
+logger = logging.getLogger("settings")
 
 router = APIRouter()
 
@@ -147,7 +150,8 @@ def create_database_backup(
             "size_bytes": size
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Backup creation failed: {str(e)}")
+        logger.exception("Backup creation failed")
+        raise HTTPException(status_code=500, detail="Backup creation failed. Please try again or contact support.")
 
 @router.get("/backups")
 def list_backups(
@@ -170,7 +174,8 @@ def list_backups(
         backups_list.sort(key=lambda x: x["created_at"], reverse=True)
         return backups_list
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Listing backups failed: {str(e)}")
+        logger.exception("Listing backups failed")
+        raise HTTPException(status_code=500, detail="Listing backups failed. Please try again or contact support.")
 
 @router.get("/backups/{filename}/download")
 def download_backup_file(
@@ -220,4 +225,5 @@ def optimize_database(
             "space_saved": saved_bytes
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Optimization failed: {str(e)}")
+        logger.exception("Database optimization failed")
+        raise HTTPException(status_code=500, detail="Optimization failed. Please try again or contact support.")

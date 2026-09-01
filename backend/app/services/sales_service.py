@@ -1,8 +1,11 @@
+import logging
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import date, datetime
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
+
+logger = logging.getLogger("sales_service")
 
 from app.core.timezone import IST
 from app.models.sale import Sale, SaleItem
@@ -84,7 +87,7 @@ class SalesService:
                             f"Available: {batch_avail}, Requested: {requested_qty}"
                         )
 
-                    batch.quantity_available = float(batch_avail - requested_qty)
+                    batch.quantity_available = batch_avail - requested_qty
                     unit_price = round_money(Decimal(str(batch.selling_price)))
                     item_discount = round_money(Decimal(str(req_item.discount or "0.00")))
                     gross_line = round_money(unit_price * requested_qty)
@@ -130,7 +133,7 @@ class SalesService:
                             break
                         batch_avail = Decimal(str(batch.quantity_available))
                         take = min(batch_avail, remaining_needed)
-                        batch.quantity_available = float(batch_avail - take)
+                        batch.quantity_available = batch_avail - take
                         remaining_needed -= take
 
                         unit_price = round_money(Decimal(str(batch.selling_price)))
@@ -217,12 +220,24 @@ class SalesService:
                 )
                 db.add(txn)
 
-            # 6. Persist Payments
+            # 6. Persist Payments with Strict Financial Reconciliation
             if sale_in.payments:
                 total_paid = Decimal("0.00")
+                payments_to_add = []
                 for p_req in sale_in.payments:
                     p_amt = round_money(p_req.amount) if p_req.amount is not None else grand_total
+                    if p_amt <= Decimal("0.00"):
+                        raise ValueError(f"Payment amount must be greater than zero. Received: {p_amt}")
                     total_paid += p_amt
+                    payments_to_add.append((p_req, p_amt))
+
+                if total_paid != grand_total:
+                    raise ValueError(
+                        f"Payment total ({total_paid}) does not reconcile with sale grand total ({grand_total}). "
+                        f"Difference: {total_paid - grand_total}"
+                    )
+
+                for p_req, p_amt in payments_to_add:
                     payment = Payment(
                         sale_id=sale.id,
                         branch_id=branch_id,
@@ -249,7 +264,19 @@ class SalesService:
                 )
                 db.add(payment)
 
-            # 7. Atomic Commit
+            # 7. Audit Log
+            from app.services.audit_service import AuditService
+            AuditService.log(
+                db=db,
+                action="SALE_CREATED",
+                user_id=current_user.id,
+                branch_id=branch_id,
+                entity_type="sale",
+                entity_id=sale.id,
+                new_value={"invoice_number": invoice_number, "grand_total": str(grand_total), "items_count": len(allocated_items)}
+            )
+
+            # 8. Atomic Commit
             db.commit()
             db.refresh(sale)
             return sale
@@ -261,9 +288,10 @@ class SalesService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
         except Exception as e:
             db.rollback()
+            logger.exception("Sale transaction failed unexpectedly")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Sale transaction failed: {str(e)}"
+                detail="Sale transaction failed due to an internal error. Please try again or contact support."
             )
 
     @staticmethod

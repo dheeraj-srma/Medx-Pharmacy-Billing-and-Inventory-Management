@@ -1,3 +1,4 @@
+from decimal import Decimal
 from pydantic import BaseModel, ConfigDict
 from datetime import date, datetime
 from typing import Optional
@@ -8,16 +9,15 @@ class InventoryBatchBase(BaseModel):
     batch_number: Optional[str] = None
     manufacturing_date: Optional[date] = None
     expiry_date: date
-    quantity_available: float
-    purchase_price: float = 0.0
-    mrp: float = 0.0
-    selling_price: float = 0.0
+    quantity_available: Decimal = Decimal("0.0000")
+    purchase_price: Decimal = Decimal("0.00")
+    mrp: Decimal = Decimal("0.00")
+    selling_price: Decimal = Decimal("0.00")
     supplier_id: Optional[int] = None
     branch_id: Optional[int] = None
 
 class InventoryBatchCreate(InventoryBatchBase):
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class InventoryBatchResponse(InventoryBatchBase):
     id: int
@@ -28,7 +28,7 @@ class InventoryBatchResponse(InventoryBatchBase):
 class InventoryTransactionBase(BaseModel):
     product_id: int
     batch_id: int
-    quantity_change: float
+    quantity_change: Decimal
     transaction_type: TransactionTypeEnum
     reference_type: Optional[str] = None
     reference_id: Optional[str] = None
@@ -36,8 +36,7 @@ class InventoryTransactionBase(BaseModel):
     branch_id: Optional[int] = None
 
 class InventoryTransactionCreate(InventoryTransactionBase):
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class InventoryTransactionResponse(InventoryTransactionBase):
     id: int
@@ -47,7 +46,7 @@ class InventoryTransactionResponse(InventoryTransactionBase):
 
 class StockAdjustmentRequest(BaseModel):
     batch_id: int
-    quantity_change: float
+    quantity_change: Decimal
     transaction_type: TransactionTypeEnum = TransactionTypeEnum.ADJUSTMENT
     notes: Optional[str] = None
 

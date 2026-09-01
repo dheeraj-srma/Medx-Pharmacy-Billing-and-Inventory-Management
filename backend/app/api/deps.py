@@ -17,28 +17,17 @@ def get_current_user(
     db: Session = Depends(get_db),
     token: str = Depends(reusable_oauth2)
 ) -> User:
-    payload = None
-    # Try decoding with primary SECRET_KEY
     try:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
         )
     except JWTError:
-        # Graceful fallback for active browser sessions signed before key rotation
-        LEGACY_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
-        if settings.SECRET_KEY != LEGACY_KEY:
-            try:
-                payload = jwt.decode(token, LEGACY_KEY, algorithms=[settings.ALGORITHM])
-            except JWTError:
-                payload = None
-
-    if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-        
+
     sub: str = payload.get("sub")
     if not sub:
         raise HTTPException(

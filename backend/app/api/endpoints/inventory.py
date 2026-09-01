@@ -9,9 +9,11 @@ from app.models.inventory import InventoryBatch, InventoryTransaction, Transacti
 from app.schemas.inventory import InventoryBatchResponse, InventoryBatchListResponse, InventoryTransactionListResponse, StockAdjustmentRequest
 from app.models.product import Product
 from app.models.user import User, RoleEnum
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 router = APIRouter()
+
+from decimal import Decimal
 
 class ActiveBatchResponse(BaseModel):
     id: int
@@ -30,8 +32,7 @@ class ActiveBatchResponse(BaseModel):
     selling_price: float
     branch_id: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 @router.get("/active-batches", response_model=List[ActiveBatchResponse])
 def get_active_batches(
@@ -239,6 +240,19 @@ def adjust_stock(
     )
     db.add(batch)
     db.add(txn)
+
+    # Audit Log
+    from app.services.audit_service import AuditService
+    AuditService.log(
+        db=db,
+        action="STOCK_ADJUSTED",
+        user_id=current_user.id,
+        branch_id=current_user.branch_id,
+        entity_type="inventory_batch",
+        entity_id=batch.id,
+        new_value={"quantity_change": str(adjust_in.quantity_change), "type": adjust_in.transaction_type.value, "notes": adjust_in.notes}
+    )
+
     db.commit()
     db.refresh(batch)
     return batch
