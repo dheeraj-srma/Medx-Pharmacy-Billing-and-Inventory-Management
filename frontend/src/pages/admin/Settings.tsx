@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
-  Save, ShieldAlert, Sparkles, Sliders, UserPlus, Key, Edit2, 
-  Trash2, Database, RefreshCw, Download, CheckCircle2, UserX, Maximize2, X
+  Save, ShieldAlert, Sliders, UserPlus, Key, Edit2, 
+  Trash2, Database, RefreshCw, Download, CheckCircle2, UserX, Maximize2, X, Activity
 } from "lucide-react";
 import {
   Table,
@@ -368,8 +368,8 @@ export default function Settings() {
 
   if (isLoading) {
     return (
-      <div className="p-8 text-center text-slate-500 flex items-center justify-center h-64">
-        <Sparkles className="animate-spin mr-2 text-indigo-400" size={24} /> Loading settings...
+      <div className="p-8 text-center text-slate-400 flex items-center justify-center h-64">
+        <Activity className="animate-ecg-pulse mr-2 text-indigo-400" size={24} /> Loading settings...
       </div>
     );
   }

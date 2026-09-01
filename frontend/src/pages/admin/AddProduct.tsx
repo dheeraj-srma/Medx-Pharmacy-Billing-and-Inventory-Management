@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Save, Upload, Loader2, Package, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Save, Upload, Loader2, Package, AlertTriangle, CheckCircle2, Activity } from "lucide-react";
 
 /** A single field-level data integrity issue returned from the API */
 interface FieldIssue {
@@ -225,7 +225,7 @@ export default function AddProduct() {
   if (isLoadingProduct) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-400 space-y-4">
-        <Loader2 className="animate-spin text-indigo-400" size={36} />
+        <Activity className="animate-ecg-pulse text-indigo-400" size={36} />
         <p className="text-sm font-medium">Loading product details...</p>
       </div>
     );

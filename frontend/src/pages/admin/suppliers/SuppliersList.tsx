@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Edit, Building2, Phone, Mail } from "lucide-react";
+import { Plus, Search, Edit, Building2, Phone, Mail, Activity } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function SuppliersList() {
@@ -65,8 +65,11 @@ export default function SuppliersList() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-10 text-slate-500">
-                  Loading suppliers...
+                <TableCell colSpan={5} className="text-center py-10 text-slate-400">
+                  <div className="flex items-center justify-center gap-2">
+                    <Activity size={18} className="animate-ecg-pulse text-indigo-400" />
+                    <span>Loading suppliers...</span>
+                  </div>
                 </TableCell>
               </TableRow>
             ) : filteredSuppliers.length === 0 ? (

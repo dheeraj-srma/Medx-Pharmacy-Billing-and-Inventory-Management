@@ -10,7 +10,6 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { 
   BarChart3, 
-  TrendingUp, 
   FileDown, 
   IndianRupee, 
   ShoppingCart, 
@@ -19,6 +18,7 @@ import {
   AlertTriangle, 
   Calendar,
   Clock,
+  Activity,
 } from "lucide-react";
 
 export default function Reports() {
@@ -431,8 +431,8 @@ export default function Reports() {
       </div>
 
       {loading ? (
-        <div className="p-20 text-center text-slate-500 flex items-center justify-center">
-          <TrendingUp className="animate-spin mr-2 text-indigo-400" size={24} /> Generating Report...
+        <div className="p-20 text-center text-slate-400 flex items-center justify-center">
+          <Activity className="animate-ecg-pulse mr-2 text-indigo-400" size={24} /> Generating Report...
         </div>
       ) : (
         <>
@@ -537,8 +537,8 @@ export default function Reports() {
               </Card>
             </div>
           ) : (
-            <div className="p-20 text-center text-slate-500 flex flex-col items-center justify-center space-y-3">
-              <TrendingUp className="animate-spin text-indigo-400" size={32} />
+            <div className="p-20 text-center text-slate-400 flex flex-col items-center justify-center space-y-3">
+              <Activity className="animate-ecg-pulse text-indigo-400" size={32} />
               <p className="text-sm font-medium">Loading sales audit records...</p>
             </div>
           )
@@ -622,8 +622,8 @@ export default function Reports() {
                 </Card>
               </div>
             ) : (
-              <div className="p-20 text-center text-slate-500 flex flex-col items-center justify-center space-y-3">
-                <TrendingUp className="animate-spin text-indigo-400" size={32} />
+              <div className="p-20 text-center text-slate-400 flex flex-col items-center justify-center space-y-3">
+                <Activity className="animate-ecg-pulse text-indigo-400" size={32} />
                 <p className="text-sm font-medium">Loading purchase expenses...</p>
               </div>
             )

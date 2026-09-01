@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ArrowLeft, Save, Building2, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, Building2, Loader2, Activity } from "lucide-react";
 
 const supplierSchema = z.object({
   name: z.string().min(1, "Contact person or supplier name is required"),
@@ -105,7 +105,7 @@ export default function AddSupplier() {
   if (isLoadingSupplier) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-400 space-y-4">
-        <Loader2 className="animate-spin text-indigo-400" size={36} />
+        <Activity className="animate-ecg-pulse text-indigo-400" size={36} />
         <p className="text-sm font-medium">Loading supplier details...</p>
       </div>
     );

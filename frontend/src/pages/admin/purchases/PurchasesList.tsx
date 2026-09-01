@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Plus, Search, Eye, X, Building2, Calendar, FileText, Printer, Loader2, Package } from "lucide-react";
+import { Plus, Search, Eye, X, Building2, Calendar, FileText, Printer, Package, Activity } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -272,8 +272,11 @@ export default function PurchasesList() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-10 text-slate-500">
-                  Loading purchases...
+                <TableCell colSpan={6} className="text-center py-10 text-slate-400">
+                  <div className="flex items-center justify-center gap-2">
+                    <Activity size={18} className="animate-ecg-pulse text-indigo-400" />
+                    <span>Loading purchases...</span>
+                  </div>
                 </TableCell>
               </TableRow>
             ) : filteredPurchases.length === 0 ? (
@@ -373,7 +376,7 @@ export default function PurchasesList() {
             <CardContent className="p-6 overflow-y-auto space-y-6 flex-1">
               {isLoadingDetail || !purchaseDetail ? (
                 <div className="flex flex-col items-center justify-center py-16 text-slate-400 space-y-3">
-                  <Loader2 className="animate-spin text-indigo-400" size={32} />
+                  <Activity className="animate-ecg-pulse text-indigo-400" size={32} />
                   <p className="text-sm font-medium">Loading inward invoice records...</p>
                 </div>
               ) : (

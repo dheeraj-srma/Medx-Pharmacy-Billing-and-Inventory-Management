@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Activity } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MedicineIcon } from "../../lib/medicineIcon";
 
@@ -88,8 +88,11 @@ export default function ProductsList() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-10 text-slate-500">
-                  Loading products...
+                <TableCell colSpan={6} className="text-center py-10 text-slate-400">
+                  <div className="flex items-center justify-center gap-2">
+                    <Activity size={18} className="animate-ecg-pulse text-indigo-400" />
+                    <span>Loading products...</span>
+                  </div>
                 </TableCell>
               </TableRow>
             ) : filteredProducts.length === 0 ? (

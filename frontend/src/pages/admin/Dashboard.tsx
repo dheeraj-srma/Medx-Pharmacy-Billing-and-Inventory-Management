@@ -74,8 +74,8 @@ export default function Dashboard() {
 
   if (loading || !stats) {
     return (
-      <div className="p-8 text-center text-slate-500 flex items-center justify-center h-64">
-        <Activity className="animate-spin mr-2" size={24} /> Loading Dashboard...
+      <div className="p-8 text-center text-slate-400 flex items-center justify-center h-64">
+        <Activity className="animate-ecg-pulse mr-2 text-indigo-400" size={24} /> Loading Dashboard...
       </div>
     );
   }
@@ -250,7 +250,7 @@ export default function Dashboard() {
             <CardContent className="p-6 overflow-y-auto space-y-4 flex-1">
               {detailsLoading ? (
                 <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3">
-                  <Activity className="animate-spin text-indigo-400" size={32} />
+                  <Activity className="animate-ecg-pulse text-indigo-400" size={32} />
                   <p className="text-sm font-medium">Fetching detailed breakdown data...</p>
                 </div>
               ) : kpiDetails.length === 0 ? (

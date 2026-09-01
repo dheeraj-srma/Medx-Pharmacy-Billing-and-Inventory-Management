@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertTriangle, CheckCircle2, RefreshCw, Wrench, ShieldAlert, TriangleAlert, CircleDot } from "lucide-react";
+import { AlertTriangle, CheckCircle2, RefreshCw, Wrench, ShieldAlert, TriangleAlert, CircleDot, Activity } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useModal } from "@/providers/ModalProvider";
 
@@ -237,8 +237,8 @@ export default function DataIssues() {
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
-            <div className="flex items-center justify-center py-16 text-slate-500">
-              <RefreshCw size={20} className="animate-spin mr-2" />
+            <div className="flex items-center justify-center py-16 text-slate-400">
+              <Activity size={20} className="animate-ecg-pulse text-indigo-400 mr-2" />
               Loading issues...
             </div>
           ) : filteredIssues.length === 0 ? (

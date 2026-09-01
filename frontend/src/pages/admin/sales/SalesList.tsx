@@ -9,7 +9,7 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search } from "lucide-react";
+import { Search, Activity } from "lucide-react";
 import { formatDateDDMMYYYY } from "@/lib/utils";
 
 export default function SalesList() {
@@ -56,8 +56,11 @@ export default function SalesList() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-10 text-slate-500">
-                  Loading sales...
+                <TableCell colSpan={6} className="text-center py-10 text-slate-400">
+                  <div className="flex items-center justify-center gap-2">
+                    <Activity size={18} className="animate-ecg-pulse text-indigo-400" />
+                    <span>Loading sales...</span>
+                  </div>
                 </TableCell>
               </TableRow>
             ) : filteredSales.length === 0 ? (
