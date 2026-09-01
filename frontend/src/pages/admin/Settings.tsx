@@ -796,7 +796,9 @@ export default function Settings() {
                 <Label htmlFor="regPassword" className="text-slate-300">Default Password</Label>
                 <Input 
                   id="regPassword" 
+                  name="new-password"
                   type="password"
+                  autoComplete="new-password"
                   placeholder="Minimum 6 characters" 
                   value={newUser.password} 
                   onChange={(e) => setNewUser({...newUser, password: e.target.value})}
@@ -959,7 +961,9 @@ export default function Settings() {
                 <Label htmlFor="resetPasswordInput" className="text-slate-300">New Password</Label>
                 <Input 
                   id="resetPasswordInput" 
+                  name="new-password"
                   type="password"
+                  autoComplete="new-password"
                   placeholder="Enter new password" 
                   value={resetPassword} 
                   onChange={(e) => setResetPassword(e.target.value)}
