@@ -66,8 +66,11 @@ export default function Login() {
     const usernameInput = (target.elements.namedItem("username") || target.elements.namedItem("email")) as HTMLInputElement | null;
     const passwordInput = target.elements.namedItem("password") as HTMLInputElement | null;
 
-    const finalEmail = usernameInput?.value || email;
-    const finalPassword = passwordInput?.value || password;
+    const rawEmail = usernameInput?.value !== undefined && usernameInput?.value !== "" ? usernameInput.value : email;
+    const rawPassword = passwordInput?.value !== undefined && passwordInput?.value !== "" ? passwordInput.value : password;
+
+    const finalEmail = rawEmail.trim().toLowerCase();
+    const finalPassword = rawPassword;
 
     if (!finalEmail || !finalPassword) {
       setError("Please enter both email and password.");
@@ -103,7 +106,14 @@ export default function Login() {
       const from = location.state?.from?.pathname || "/admin";
       navigate(from, { replace: true });
     } catch (err: any) {
-      setError(err.response?.data?.detail || "Invalid email or password.");
+      console.error("Login attempt error:", err);
+      if (err.response?.data?.detail) {
+        setError(err.response.data.detail);
+      } else if (err.message === "Network Error" || !err.response) {
+        setError(`Unable to reach backend API at ${api.defaults.baseURL}. Please ensure the backend server is running.`);
+      } else {
+        setError(err.response?.data?.message || err.message || "Invalid email or password.");
+      }
     } finally {
       setIsLoading(false);
     }

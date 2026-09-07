@@ -17,7 +17,9 @@ def login_access_token(
     """
     OAuth2 compatible token login, get an access token for future requests
     """
-    user = db.query(User).filter(User.email == form_data.username).first()
+    from sqlalchemy import func
+    clean_username = form_data.username.strip().lower() if form_data.username else ""
+    user = db.query(User).filter(func.lower(User.email) == clean_username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     elif not user.is_active:
