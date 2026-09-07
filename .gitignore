@@ -33,3 +33,6 @@ dist-ssr/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Root vercel.json (frontend is deployed separately from /frontend dir)
+/vercel.json
