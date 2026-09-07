@@ -13,22 +13,13 @@
     {
       "source": "/api/(.*)",
       "destination": {
-        "service": "backend",
-        "path": "/api/$1"
-      }
-    },
-    {
-      "source": "/api",
-      "destination": {
-        "service": "backend",
-        "path": "/api"
+        "service": "backend"
       }
     },
     {
       "source": "/(.*)",
       "destination": {
-        "service": "frontend",
-        "path": "/index.html"
+        "service": "frontend"
       }
     }
   ]
