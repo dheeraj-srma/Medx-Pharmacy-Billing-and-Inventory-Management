@@ -9,7 +9,7 @@ from app.core.security import get_password_hash
 
 def seed_admin():
     db = SessionLocal()
-    admin_email = "admin@medicalstore.com"
+    admin_email = "admin@medxpharmacy.com"
     existing_admin = db.query(User).filter(User.email == admin_email).first()
     
     if not existing_admin:
@@ -22,9 +22,12 @@ def seed_admin():
         )
         db.add(admin_user)
         db.commit()
-        print("Admin user created: admin@medicalstore.com / admin123")
+        print(f"Admin user created: {admin_email} / admin123")
     else:
-        print("Admin user already exists.")
+        existing_admin.hashed_password = get_password_hash("admin123")
+        existing_admin.is_active = True
+        db.commit()
+        print(f"Admin password reset to: {admin_email} / admin123")
     
     db.close()
 
