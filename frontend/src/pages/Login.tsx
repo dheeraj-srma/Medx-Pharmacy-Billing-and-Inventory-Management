@@ -144,7 +144,7 @@ export default function Login() {
                 id="username" 
                 name="username"
                 type="email" 
-                placeholder="name@medicalstore.com" 
+                placeholder="admin@medxpharmacy.com" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="username"
