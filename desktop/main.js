@@ -1,11 +1,10 @@
-const { app, BrowserWindow, protocol, net, shell, ipcMain, safeStorage, session } = require('electron');
+const { app, BrowserWindow, protocol, net, shell, ipcMain, safeStorage, session, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const http = require('http');
 const netModule = require('net');
 const { spawn, execSync, exec } = require('child_process');
-const { pathToFileURL } = require('url');
 
 // Enforce single instance lock
 const gotTheLock = app.requestSingleInstanceLock();
@@ -36,14 +35,54 @@ const desktopSecret = crypto.randomBytes(32).toString('hex');
 // Application paths
 const userDataDir = path.join(app.getPath('appData'), 'MedX Pharmacy');
 const configFilePath = path.join(userDataDir, 'config.env');
+const logsDir = path.join(userDataDir, 'logs');
+const backendLogPath = path.join(logsDir, 'backend.log');
 const uploadsDir = path.join(userDataDir, 'uploads');
+
+let backendLogStream = null;
+let recentBackendErrors = [];
 
 function ensureDirectories() {
   if (!fs.existsSync(userDataDir)) {
     fs.mkdirSync(userDataDir, { recursive: true });
   }
+  if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true });
+  }
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+}
+
+/**
+ * Sanitizes log output so database passwords, connection strings,
+ * and secret keys are never written to disk or console.
+ */
+function sanitizeLogText(text) {
+  if (!text) return '';
+  return String(text)
+    // Redact PostgreSQL credentials in URIs: postgresql://user:password@host:port/db
+    .replace(/([a-zA-Z0-9_+.-]+:\/\/[^:\s]+:)([^@\s]+)(@[^\s]+)/g, '$1***$3')
+    // Redact DATABASE_URL, SECRET_KEY, passwords, and tokens in key=val or JSON
+    .replace(/(DATABASE_URL\s*[:=]\s*["']?)([^"'\r\n\s]+)(["']?)/gi, '$1***$3')
+    .replace(/(SECRET_KEY\s*[:=]\s*["']?)([^"'\r\n\s]+)(["']?)/gi, '$1***$3')
+    .replace(/(password\s*[:=]\s*["']?)([^"'\r\n\s,]+)(["']?)/gi, '$1***$3')
+    .replace(/(token\s*[:=]\s*["']?)([^"'\r\n\s,]+)(["']?)/gi, '$1***$3');
+}
+
+function writeBackendLog(message) {
+  try {
+    ensureDirectories();
+    const sanitized = sanitizeLogText(message);
+    const timestamp = new Date().toISOString();
+    const formatted = `[${timestamp}] ${sanitized}\n`;
+
+    if (!backendLogStream) {
+      backendLogStream = fs.createWriteStream(backendLogPath, { flags: 'a', encoding: 'utf8' });
+    }
+    backendLogStream.write(formatted);
+  } catch (err) {
+    console.error('Failed to write to backend.log:', err);
   }
 }
 
@@ -62,10 +101,15 @@ function getAvailablePort(startPort = 8000) {
 }
 
 // Check backend health endpoint
-function checkBackendHealth(port, maxRetries = 30, interval = 500) {
+function checkBackendHealth(port, maxRetries = 35, interval = 400, isExited = () => false) {
   return new Promise((resolve) => {
     let attempts = 0;
     const intervalId = setInterval(() => {
+      if (isExited()) {
+        clearInterval(intervalId);
+        resolve(false);
+        return;
+      }
       attempts++;
       const req = http.get(`http://127.0.0.1:${port}/health`, (res) => {
         if (res.statusCode === 200) {
@@ -74,12 +118,12 @@ function checkBackendHealth(port, maxRetries = 30, interval = 500) {
         }
       });
       req.on('error', () => {
-        if (attempts >= maxRetries) {
+        if (attempts >= maxRetries || isExited()) {
           clearInterval(intervalId);
           resolve(false);
         }
       });
-      req.setTimeout(400, () => {
+      req.setTimeout(350, () => {
         req.destroy();
       });
     }, interval);
@@ -100,12 +144,32 @@ function getBackendExecutablePath() {
   return null;
 }
 
+function getPythonExecutable() {
+  const venvPython = path.join(__dirname, '..', 'backend', 'venv', 'Scripts', 'python.exe');
+  if (fs.existsSync(venvPython)) {
+    return venvPython;
+  }
+  const rootVenvPython = path.join(__dirname, '..', 'venv', 'Scripts', 'python.exe');
+  if (fs.existsSync(rootVenvPython)) {
+    return rootVenvPython;
+  }
+  return 'python';
+}
+
 function startBackendServer() {
-  return new Promise(async (resolve, reject) => {
+  return new Promise(async (resolve) => {
     killBackend();
+    recentBackendErrors = [];
 
     backendPort = await getAvailablePort(8000);
     const exePath = getBackendExecutablePath();
+
+    writeBackendLog(`\n=======================================================`);
+    writeBackendLog(`Starting MedX Pharmacy Backend on 127.0.0.1:${backendPort}`);
+    writeBackendLog(`Target binary / script: ${exePath || 'python backend/server.py'}`);
+    writeBackendLog(`Config file: ${configFilePath}`);
+    writeBackendLog(`User data directory: ${userDataDir}`);
+    writeBackendLog(`=======================================================`);
 
     const args = [
       '--port', String(backendPort),
@@ -115,42 +179,77 @@ function startBackendServer() {
       '--desktop-secret', desktopSecret
     ];
 
+    let backendExitedEarly = false;
+    let exitDetails = null;
+
+    const spawnOptions = {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        MEDX_CONFIG_FILE: configFilePath,
+        MEDX_UPLOAD_DIR: uploadsDir,
+        MEDX_DESKTOP_SECRET: desktopSecret,
+      }
+    };
+
     console.log(`Starting MedX backend on 127.0.0.1:${backendPort}...`);
 
     if (exePath && fs.existsSync(exePath)) {
-      backendProcess = spawn(exePath, args, {
-        windowsHide: true,
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
+      writeBackendLog(`Launching compiled executable: ${exePath}`);
+      backendProcess = spawn(exePath, args, spawnOptions);
     } else {
-      // Development fallback: run with python
+      // Development fallback: run with python virtual environment
+      const pythonExe = getPythonExecutable();
       const pythonScript = path.join(__dirname, '..', 'backend', 'server.py');
-      backendProcess = spawn('python', [pythonScript, ...args], {
-        windowsHide: true,
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
+      writeBackendLog(`Launching development server via ${pythonExe}: ${pythonScript}`);
+      backendProcess = spawn(pythonExe, [pythonScript, ...args], spawnOptions);
     }
 
     backendProcess.stdout.on('data', (data) => {
-      console.log(`[Backend stdout]: ${data.toString().trim()}`);
+      const text = data.toString();
+      writeBackendLog(`[STDOUT] ${text.trim()}`);
+      console.log(`[Backend stdout]: ${sanitizeLogText(text.trim())}`);
     });
 
     backendProcess.stderr.on('data', (data) => {
-      console.error(`[Backend stderr]: ${data.toString().trim()}`);
+      const text = data.toString();
+      const sanitized = sanitizeLogText(text.trim());
+      writeBackendLog(`[STDERR] ${sanitized}`);
+      console.error(`[Backend stderr]: ${sanitized}`);
+      recentBackendErrors.push(sanitized);
+      if (recentBackendErrors.length > 30) {
+        recentBackendErrors.shift();
+      }
+    });
+
+    backendProcess.on('error', (err) => {
+      writeBackendLog(`[SPAWN ERROR] ${err.message}`);
+      console.error(`Backend process spawn error:`, err);
+      backendExitedEarly = true;
+      exitDetails = err.message;
     });
 
     backendProcess.on('exit', (code, signal) => {
-      console.log(`Backend process exited with code ${code}, signal ${signal}`);
+      const msg = `Backend process exited with code ${code}, signal ${signal}`;
+      writeBackendLog(`[EXIT] ${msg}`);
+      console.log(msg);
+      backendExitedEarly = true;
+      exitDetails = msg;
       backendProcess = null;
     });
 
-    const isHealthy = await checkBackendHealth(backendPort, 30, 500);
+    // Wait for health endpoint
+    const isHealthy = await checkBackendHealth(backendPort, 35, 400, () => backendExitedEarly);
     if (isHealthy) {
+      writeBackendLog(`Backend health check PASSED on port ${backendPort}. Ready for connections.`);
       console.log(`Backend is ready on port ${backendPort}`);
-      resolve(true);
+      resolve({ success: true, port: backendPort });
     } else {
+      const errorSummary = exitDetails || (recentBackendErrors.length > 0 ? recentBackendErrors.slice(-3).join('\n') : 'Backend failed to respond on health check endpoint.');
+      writeBackendLog(`Backend health check FAILED: ${errorSummary}`);
       console.error('Backend failed to respond on health check.');
-      resolve(false);
+      resolve({ success: false, error: errorSummary });
     }
   });
 }
@@ -205,7 +304,7 @@ function writeConfigFile(config) {
     `SECRET_KEY="${secretKey}"`,
     `ALGORITHM=HS256`,
     `ACCESS_TOKEN_EXPIRE_MINUTES=120`,
-    `CORS_ORIGINS=["http://127.0.0.1:${backendPort}","app://bundle"]`,
+    `CORS_ORIGINS=["http://127.0.0.1:${backendPort}","http://localhost:3000","app://bundle"]`,
     ''
   ].join('\n');
 
@@ -284,18 +383,6 @@ function createWindow() {
 
   mainWindow.webContents.on('dom-ready', () => {
     console.log(`[Renderer DOM Ready]: ${mainWindow.webContents.getURL()}`);
-    setTimeout(() => {
-      mainWindow.webContents.executeJavaScript(`({
-        rootChildren: document.getElementById('root')?.childElementCount,
-        bodyText: document.body.innerText.substring(0, 100),
-        title: document.title,
-        url: window.location.href
-      })`).then((info) => {
-        console.log('[Renderer Mounted State]:', JSON.stringify(info));
-      }).catch(err => {
-        console.error('[Renderer Check Error]:', err);
-      });
-    }, 500);
   });
 
   loadAppOrSetup();
@@ -315,16 +402,41 @@ async function loadAppOrSetup() {
     return;
   }
 
-  // Start backend
-  const ready = await startBackendServer();
-  if (ready) {
+  // Start backend and await health response
+  const result = await startBackendServer();
+  if (result.success) {
     if (process.env.ELECTRON_DEV === 'true') {
       mainWindow.loadURL('http://localhost:3000');
     } else {
       mainWindow.loadURL('app://bundle/index.html');
     }
   } else {
-    mainWindow.loadFile(path.join(__dirname, 'setup.html'));
+    // Show helpful diagnostic dialog rather than broken screen
+    const errorDetails = result.error || 'The backend process terminated unexpectedly or failed the health check.';
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: 'error',
+      title: 'MedX Pharmacy - Backend Startup Failure',
+      message: 'Unable to start the MedX local backend service.',
+      detail: `The desktop application failed to start the local backend service or connect to the database.\n\n` +
+        `Error details:\n${errorDetails}\n\n` +
+        `Logs saved at:\n${backendLogPath}\n\n` +
+        `Would you like to verify your database connection string in the setup wizard?`,
+      buttons: ['Open Setup Wizard', 'Open Log File', 'Exit Application'],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true
+    });
+
+    if (choice === 0) {
+      mainWindow.loadFile(path.join(__dirname, 'setup.html'));
+    } else if (choice === 1) {
+      try {
+        shell.openPath(backendLogPath);
+      } catch (e) {}
+      mainWindow.loadFile(path.join(__dirname, 'setup.html'));
+    } else {
+      app.quit();
+    }
   }
 }
 
@@ -402,7 +514,7 @@ app.whenReady().then(() => {
           "script-src 'self' app: file: 'unsafe-inline' 'wasm-unsafe-eval'; " +
           "style-src 'self' app: file: 'unsafe-inline' https://fonts.googleapis.com; " +
           "font-src 'self' app: file: https://fonts.gstatic.com data:; " +
-          "img-src 'self' app: file: data: blob: http://127.0.0.1:* https://* http://*; " +
+          "img-src 'self' app: file: data: blob: http://127.0.0.1:* http://localhost:* https://* http://*; " +
           "connect-src 'self' app: file: http://127.0.0.1:* http://localhost:* https://*; " +
           "object-src 'none'; " +
           "base-uri 'self' app:; " +
@@ -423,6 +535,15 @@ app.whenReady().then(() => {
     return desktopSecret;
   });
 
+  ipcMain.handle('desktop:open-log-file', () => {
+    try {
+      shell.openPath(backendLogPath);
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
   ipcMain.handle('setup:get-config', () => {
     return parseConfigFile();
   });
@@ -435,14 +556,16 @@ app.whenReady().then(() => {
       .replace(/^postgres:\/\//, 'postgresql+psycopg2://')
       .replace(/^postgresql:\/\//, 'postgresql+psycopg2://');
 
-    // Perform test using Python check
+    const pythonExe = getPythonExecutable();
+
     return new Promise((resolve) => {
       const pyCode = `from sqlalchemy import create_engine, text; engine = create_engine('${normalizedUrl.replace(/'/g, "\\'")}', pool_pre_ping=True); conn = engine.connect(); conn.execute(text('SELECT 1')); conn.close(); print('OK')`;
-      exec(`python -c "${pyCode}"`, { timeout: 15000 }, (error, stdout) => {
+      exec(`"${pythonExe}" -c "${pyCode}"`, { timeout: 15000 }, (error, stdout, stderr) => {
         if (!error && stdout.includes('OK')) {
           resolve({ success: true });
         } else {
-          resolve({ success: false, error: error ? error.message : 'Connection test failed.' });
+          const sanitizedErr = sanitizeLogText(error ? error.message : (stderr || 'Connection test failed.'));
+          resolve({ success: false, error: sanitizedErr });
         }
       });
     });
@@ -451,8 +574,8 @@ app.whenReady().then(() => {
   ipcMain.handle('setup:save-config', async (_, config) => {
     try {
       writeConfigFile(config);
-      const ready = await startBackendServer();
-      if (ready) {
+      const result = await startBackendServer();
+      if (result.success) {
         if (process.env.ELECTRON_DEV === 'true') {
           mainWindow.loadURL('http://localhost:3000');
         } else {
@@ -460,7 +583,10 @@ app.whenReady().then(() => {
         }
         return { success: true };
       } else {
-        return { success: false, error: 'Backend failed to start with the provided credentials. Please verify your connection string.' };
+        return { 
+          success: false, 
+          error: `Backend failed to start: ${result.error || 'Health check timed out'}. See logs at: ${backendLogPath}` 
+        };
       }
     } catch (err) {
       return { success: false, error: err.message };

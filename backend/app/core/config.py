@@ -12,6 +12,26 @@ logger = logging.getLogger("config")
 _INSECURE_DEFAULT_SECRET = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 
 
+def resolve_config_file() -> str:
+    # 1. Explicit environment variable set by Electron or CLI
+    custom_env = os.environ.get("MEDX_CONFIG_FILE")
+    if custom_env and os.path.exists(custom_env):
+        return custom_env
+
+    # 2. Windows standard %APPDATA%\MedX Pharmacy\config.env
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        appdata_env = os.path.join(appdata, "MedX Pharmacy", "config.env")
+        if os.path.exists(appdata_env):
+            return appdata_env
+
+    # 3. Local workspace .env fallback
+    if os.path.exists(".env"):
+        return ".env"
+
+    return ".env"
+
+
 class Settings(BaseSettings):
     PROJECT_NAME: str = "MedX Pharmacy Management API"
     VERSION: str = "2.1.0"
@@ -101,7 +121,7 @@ class Settings(BaseSettings):
         return self
 
     model_config = SettingsConfigDict(
-        env_file=os.environ.get("MEDX_CONFIG_FILE", ".env"),
+        env_file=resolve_config_file(),
         env_file_encoding="utf-8",
         extra="ignore"
     )
