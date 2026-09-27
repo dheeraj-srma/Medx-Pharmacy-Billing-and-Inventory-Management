@@ -31,9 +31,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Request ID & Performance Logging Middleware
+# Desktop Loopback Security & Request Logging Middleware
 @app.middleware("http")
 async def request_logging_middleware(request: Request, call_next):
+    # Desktop loopback protection (if configured)
+    if settings.MEDX_DESKTOP_SECRET and request.url.path.startswith(settings.API_V1_STR):
+        # Allow preflight OPTIONS
+        if request.method != "OPTIONS":
+            provided_secret = request.headers.get("X-MedX-Desktop-Secret")
+            if provided_secret != settings.MEDX_DESKTOP_SECRET:
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={"error": {"code": "FORBIDDEN", "message": "Unauthorized local client request."}}
+                )
+
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
     start_time = time.perf_counter()
     
@@ -66,9 +77,9 @@ async def request_logging_middleware(request: Request, call_next):
             headers={"X-Request-ID": request_id}
         )
 
-if not os.path.exists("uploads"):
-    os.makedirs("uploads")
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+if not os.path.exists(settings.UPLOAD_DIR):
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
@@ -80,3 +91,8 @@ def root():
         "environment": settings.ENVIRONMENT,
         "status": "online"
     }
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+

@@ -1,9 +1,43 @@
-# Environment variables
+# Secrets and local configuration
 .env
 .env.*
-!.env.example
+*.env
+!*.env.example
+config.env
 
-# Databases and Backups
+# Node
+node_modules/
+
+# Frontend builds
+frontend/dist/
+dist/
+dist-ssr/
+*.local
+
+# Electron packaging
+dist-electron/
+release/
+out/
+/desktop
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# PyInstaller generated files
+build/
+dist/
+*.manifest
+
+# Local user data, databases & backups
+uploads/
+backend/uploads/
 *.db
 *.sqlite
 *.sqlite3
@@ -11,22 +45,6 @@ medical_store.db
 backend/medical_store.db
 backend/backups/
 backups/
-
-# Python caches
-__pycache__/
-*.py[cod]
-*$py.class
-.pytest_cache/
-.coverage
-htmlcov/
-venv/
-.venv/
-
-# Node & Frontend
-node_modules/
-dist/
-dist-ssr/
-*.local
 
 # IDE & OS files
 .vscode/

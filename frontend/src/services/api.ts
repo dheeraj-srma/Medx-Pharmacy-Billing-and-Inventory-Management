@@ -133,8 +133,27 @@ api.defaults.adapter = async (config) => {
 // Request & Response interceptors
 // ─────────────────────────────────────────────────────────────
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
     updateNetworkStatus(1);
+
+    // Desktop dynamic base URL & loopback secret bridge
+    if (typeof window !== 'undefined' && window.electronAPI?.isDesktop) {
+      try {
+        if (!config.baseURL || config.baseURL === '/api/v1' || config.baseURL.startsWith('http://127.0.0.1')) {
+          const dynamicUrl = await window.electronAPI.getApiBaseUrl();
+          if (dynamicUrl) {
+            config.baseURL = dynamicUrl;
+          }
+        }
+        const desktopSecret = await window.electronAPI.getDesktopSecret();
+        if (desktopSecret) {
+          config.headers['X-MedX-Desktop-Secret'] = desktopSecret;
+        }
+      } catch (e) {
+        // Fallback gracefully
+      }
+    }
+
     const token = localStorage.getItem('token');
     if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
@@ -144,6 +163,7 @@ api.interceptors.request.use(
     return Promise.reject(error);
   }
 );
+
 
 api.interceptors.response.use(
   (response) => {

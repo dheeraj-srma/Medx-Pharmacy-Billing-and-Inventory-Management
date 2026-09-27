@@ -1,0 +1,70 @@
+{
+  "name": "medx-pharmacy-desktop",
+  "version": "2.1.0",
+  "description": "MedX Pharmacy Billing & Inventory Management Desktop Application",
+  "main": "desktop/main.js",
+  "author": "MedX Pharmacy",
+  "private": true,
+  "scripts": {
+    "build:frontend": "npm --prefix frontend run build",
+    "build:backend": "cd backend && python -m PyInstaller medx-backend.spec --clean --noconfirm",
+    "build:desktop": "npm run build:frontend",
+    "build:all": "npm run build:backend && npm run build:frontend",
+    "start:desktop": "electron .",
+    "start:desktop:dev": "set ELECTRON_DEV=true&& electron .",
+    "dist:win": "npm run build:frontend && electron-builder --win nsis",
+    "dist:win:all": "npm run build:all && electron-builder --win nsis",
+    "dist:win:dir": "npm run build:frontend && electron-builder --win --dir"
+  },
+  "build": {
+    "appId": "com.medxpharmacy.app",
+    "productName": "MedX Pharmacy",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "desktop/**/*",
+      "frontend/dist/**/*",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/*.map",
+      "!backend/**",
+      "!**/.env*",
+      "!alembic/**"
+    ],
+    "extraResources": [
+      {
+        "from": "frontend/public/logo.png",
+        "to": "logo.png"
+      },
+      {
+        "from": "backend/dist/medx-backend.exe",
+        "to": "medx-backend.exe"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "frontend/public/logo.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MedX Pharmacy",
+      "uninstallDisplayName": "MedX Pharmacy"
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3"
+  }
+}

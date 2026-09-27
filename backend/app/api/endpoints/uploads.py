@@ -1,15 +1,17 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from app.api.deps import get_current_active_admin
+from app.core.config import settings
 import shutil
 import os
 import uuid
 
 router = APIRouter()
 
-UPLOAD_DIR = "uploads"
+@router.on_event("startup")
+def ensure_upload_dir():
+    if not os.path.exists(settings.UPLOAD_DIR):
+        os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR)
 
 @router.post("/", response_model=dict)
 def upload_image(
@@ -21,7 +23,7 @@ def upload_image(
     
     file_extension = file.filename.split(".")[-1]
     unique_filename = f"{uuid.uuid4()}.{file_extension}"
-    file_path = os.path.join(UPLOAD_DIR, unique_filename)
+    file_path = os.path.join(settings.UPLOAD_DIR, unique_filename)
     
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
