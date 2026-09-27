@@ -89,6 +89,15 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Immediate initialization for Electron desktop mode
+if (typeof window !== 'undefined' && window.electronAPI?.isDesktop) {
+  window.electronAPI.getApiBaseUrl().then((dynamicUrl) => {
+    if (dynamicUrl) {
+      api.defaults.baseURL = dynamicUrl;
+    }
+  }).catch(() => {});
+}
+
 // Capture default Axios adapter
 const defaultAdapter = (axios as any).getAdapter(
   api.defaults.adapter || axios.defaults.adapter
@@ -139,11 +148,10 @@ api.interceptors.request.use(
     // Desktop dynamic base URL & loopback secret bridge
     if (typeof window !== 'undefined' && window.electronAPI?.isDesktop) {
       try {
-        if (!config.baseURL || config.baseURL === '/api/v1' || config.baseURL.startsWith('http://127.0.0.1')) {
-          const dynamicUrl = await window.electronAPI.getApiBaseUrl();
-          if (dynamicUrl) {
-            config.baseURL = dynamicUrl;
-          }
+        const dynamicUrl = await window.electronAPI.getApiBaseUrl();
+        if (dynamicUrl) {
+          config.baseURL = dynamicUrl;
+          api.defaults.baseURL = dynamicUrl;
         }
         const desktopSecret = await window.electronAPI.getDesktopSecret();
         if (desktopSecret) {

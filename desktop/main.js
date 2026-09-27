@@ -274,6 +274,30 @@ function createWindow() {
     }
   });
 
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log(`[Renderer Console]: ${message} (${sourceId}:${line})`);
+  });
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error(`[Renderer Load Failed]: ${errorCode} - ${errorDescription} (${validatedURL})`);
+  });
+
+  mainWindow.webContents.on('dom-ready', () => {
+    console.log(`[Renderer DOM Ready]: ${mainWindow.webContents.getURL()}`);
+    setTimeout(() => {
+      mainWindow.webContents.executeJavaScript(`({
+        rootChildren: document.getElementById('root')?.childElementCount,
+        bodyText: document.body.innerText.substring(0, 100),
+        title: document.title,
+        url: window.location.href
+      })`).then((info) => {
+        console.log('[Renderer Mounted State]:', JSON.stringify(info));
+      }).catch(err => {
+        console.error('[Renderer Check Error]:', err);
+      });
+    }, 500);
+  });
+
   loadAppOrSetup();
 
   mainWindow.on('closed', () => {
@@ -309,6 +333,21 @@ app.whenReady().then(() => {
   ensureDirectories();
   const distDir = path.join(__dirname, '..', 'frontend', 'dist');
 
+  const mimeTypes = {
+    '.html': 'text/html',
+    '.js': 'text/javascript',
+    '.css': 'text/css',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.ico': 'image/x-icon',
+    '.json': 'application/json',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+    '.ttf': 'font/ttf',
+  };
+
   // Handle 'app://' protocol to serve frontend static files with SPA fallback
   protocol.handle('app', (request) => {
     try {
@@ -316,18 +355,40 @@ app.whenReady().then(() => {
       let pathname = decodeURIComponent(url.pathname);
       if (pathname.startsWith('/')) pathname = pathname.slice(1);
 
+      if (!pathname || pathname === '/') {
+        pathname = 'index.html';
+      }
+
       const targetPath = path.join(distDir, pathname);
 
       if (fs.existsSync(targetPath) && fs.statSync(targetPath).isFile()) {
-        return net.fetch(pathToFileURL(targetPath).toString());
+        const ext = path.extname(targetPath).toLowerCase();
+        const contentType = mimeTypes[ext] || 'application/octet-stream';
+        const data = fs.readFileSync(targetPath);
+        return new Response(data, {
+          status: 200,
+          headers: { 'Content-Type': contentType }
+        });
       }
 
       const indexPath = path.join(distDir, 'index.html');
-      return net.fetch(pathToFileURL(indexPath).toString());
+      const data = fs.readFileSync(indexPath);
+      return new Response(data, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html' }
+      });
     } catch (err) {
       console.error('Error in app protocol handler:', err);
-      const fallbackIndexPath = path.join(distDir, 'index.html');
-      return net.fetch(pathToFileURL(fallbackIndexPath).toString());
+      const indexPath = path.join(distDir, 'index.html');
+      try {
+        const data = fs.readFileSync(indexPath);
+        return new Response(data, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' }
+        });
+      } catch (e) {
+        return new Response('File not found', { status: 404 });
+      }
     }
   });
 

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useAuthStore } from "./store/authStore";
 import { ModalProvider } from "./providers/ModalProvider";
@@ -20,6 +20,14 @@ import InventoryList from "./pages/admin/inventory/InventoryList";
 import Reports from "./pages/admin/reports/Reports";
 import Login from "./pages/Login";
 import DataIssues from "./pages/admin/DataIssues";
+
+const isElectron =
+  typeof window !== "undefined" &&
+  (window.location.protocol === "app:" ||
+    window.location.protocol === "file:" ||
+    Boolean((window as any).electronAPI?.isDesktop));
+
+const RouterComponent = isElectron ? HashRouter : BrowserRouter;
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore();
@@ -65,10 +73,11 @@ function App() {
   return (
     <TooltipProvider delayDuration={300}>
       <ModalProvider>
-        <BrowserRouter>
+        <RouterComponent>
           <Routes>
+            <Route path="/index.html" element={<Navigate to="/admin" replace />} />
             <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-          <Route path="/" element={<Navigate to="/admin" replace />} />
+            <Route path="/" element={<Navigate to="/admin" replace />} />
           
           <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
@@ -90,7 +99,7 @@ function App() {
             <Route path="data-issues" element={<DataIssues />} />
           </Route>
         </Routes>
-      </BrowserRouter>
+        </RouterComponent>
       </ModalProvider>
     </TooltipProvider>
   );
