@@ -18,7 +18,6 @@ dist-ssr/
 dist-electron/
 release/
 out/
-/desktop
 
 # Python
 __pycache__/

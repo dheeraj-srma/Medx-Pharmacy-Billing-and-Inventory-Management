@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MedX Pharmacy - Initial Setup</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --border: #334155;
+      --error: #ef4444;
+      --success: #10b981;
+      --warning: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .card {
+      background-color: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      max-width: 580px;
+      width: 100%;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+    .header { text-align: center; margin-bottom: 24px; }
+    .logo { width: 56px; height: 56px; margin: 0 auto 12px; display: block; }
+    h1 { font-size: 22px; font-weight: 700; }
+    p.sub { color: var(--text-muted); font-size: 14px; margin-top: 6px; }
+    .form-group { margin-bottom: 18px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text-muted); }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 10px 14px;
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+    input:focus { border-color: var(--primary); ring: 2px solid var(--primary); }
+    .hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; line-height: 1.4; }
+    .alert {
+      padding: 12px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-bottom: 18px;
+      display: none;
+    }
+    .alert-error { background: rgba(239, 68, 68, 0.15); border: 1px solid var(--error); color: #fca5a5; }
+    .alert-success { background: rgba(16, 185, 129, 0.15); border: 1px solid var(--success); color: #6ee7b7; }
+    .alert-warning { background: rgba(245, 158, 11, 0.15); border: 1px solid var(--warning); color: #fde68a; }
+    .btn-group { display: flex; gap: 12px; margin-top: 24px; }
+    button {
+      flex: 1;
+      padding: 12px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+    .btn-secondary { background: #334155; color: #fff; }
+    .btn-secondary:hover:not(:disabled) { background: #475569; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .backup-note {
+      font-size: 12px;
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      padding: 10px 12px;
+      border-radius: 6px;
+      color: #fbbf24;
+      margin-top: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <img src="../frontend/public/logo.png" alt="Logo" class="logo" onerror="this.style.display='none'">
+      <h1>MedX Pharmacy Setup</h1>
+      <p class="sub">Configure Cloud Supabase PostgreSQL Connection</p>
+    </div>
+
+    <div id="alertBox" class="alert"></div>
+
+    <form id="setupForm">
+      <div class="form-group">
+        <label for="dbUrl">Supabase PostgreSQL Connection URL</label>
+        <input type="password" id="dbUrl" placeholder="postgresql://postgres.[ref]:[password]@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres" required>
+        <p class="hint">Use your Supabase Session Pooler (port 6543 or 5432). Note: Credentials are stored locally in %APPDATA%\MedX Pharmacy\config.env.</p>
+      </div>
+
+      <div class="backup-note">
+        ⚠️ <strong>Database Safety Notice:</strong> The desktop app connects directly to your cloud PostgreSQL database. Ensure you maintain routine backups in your Supabase dashboard.
+      </div>
+
+      <div class="btn-group">
+        <button type="button" id="testBtn" class="btn-secondary">Test Connection</button>
+        <button type="submit" id="saveBtn" class="btn-primary">Save & Launch</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    const alertBox = document.getElementById('alertBox');
+    const testBtn = document.getElementById('testBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const dbUrlInput = document.getElementById('dbUrl');
+    const setupForm = document.getElementById('setupForm');
+
+    function showAlert(type, message) {
+      alertBox.className = 'alert alert-' + type;
+      alertBox.textContent = message;
+      alertBox.style.display = 'block';
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      if (window.electronAPI && window.electronAPI.setup) {
+        const currentConfig = await window.electronAPI.setup.getConfig();
+        if (currentConfig && currentConfig.DATABASE_URL) {
+          dbUrlInput.value = currentConfig.DATABASE_URL;
+        }
+      }
+    });
+
+    testBtn.addEventListener('click', async () => {
+      const url = dbUrlInput.value.trim();
+      if (!url) {
+        showAlert('error', 'Please enter a PostgreSQL connection URL.');
+        return;
+      }
+      testBtn.disabled = true;
+      testBtn.textContent = 'Testing...';
+      showAlert('warning', 'Connecting to database...');
+
+      try {
+        const result = await window.electronAPI.setup.testDb(url);
+        if (result.success) {
+          showAlert('success', '✓ Connection successful! Database is reachable.');
+        } else {
+          showAlert('error', 'Connection failed: ' + (result.error || 'Unknown error.'));
+        }
+      } catch (err) {
+        showAlert('error', 'Test error: ' + err.message);
+      } finally {
+        testBtn.disabled = false;
+        testBtn.textContent = 'Test Connection';
+      }
+    });
+
+    setupForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const url = dbUrlInput.value.trim();
+      if (!url) return;
+
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving & Launching...';
+      showAlert('warning', 'Saving configuration and starting backend...');
+
+      try {
+        const res = await window.electronAPI.setup.saveConfig({ DATABASE_URL: url });
+        if (res.success) {
+          showAlert('success', 'Configuration saved. Launching MedX Pharmacy...');
+        } else {
+          showAlert('error', 'Failed to save config: ' + (res.error || 'Unknown error'));
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Save & Launch';
+        }
+      } catch (err) {
+        showAlert('error', 'Save error: ' + err.message);
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save & Launch';
+      }
+    });
+  </script>
+</body>
+</html>

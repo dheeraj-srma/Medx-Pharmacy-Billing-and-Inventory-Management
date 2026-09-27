@@ -12,9 +12,9 @@
     "build:all": "npm run build:backend && npm run build:frontend",
     "start:desktop": "electron .",
     "start:desktop:dev": "set ELECTRON_DEV=true&& electron .",
-    "dist:win": "npm run build:frontend && electron-builder --win nsis",
+    "dist:win": "npm run build:all && electron-builder --win nsis",
     "dist:win:all": "npm run build:all && electron-builder --win nsis",
-    "dist:win:dir": "npm run build:frontend && electron-builder --win --dir"
+    "dist:win:dir": "npm run build:all && electron-builder --win --dir"
   },
   "build": {
     "appId": "com.medxpharmacy.app",
@@ -34,8 +34,12 @@
     ],
     "extraResources": [
       {
-        "from": "frontend/public/logo.png",
-        "to": "logo.png"
+        "from": "frontend/public/appicon.png",
+        "to": "appicon.png"
+      },
+      {
+        "from": "frontend/public/appicon.ico",
+        "to": "appicon.ico"
       },
       {
         "from": "backend/dist/medx-backend.exe",
@@ -51,7 +55,7 @@
           ]
         }
       ],
-      "icon": "frontend/public/logo.png"
+      "icon": "frontend/public/appicon.ico"
     },
     "nsis": {
       "oneClick": false,

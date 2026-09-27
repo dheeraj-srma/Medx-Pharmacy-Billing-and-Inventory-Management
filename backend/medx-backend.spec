@@ -110,5 +110,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=os.path.join(backend_dir, '..', 'frontend', 'public', 'logo.png') if os.path.exists(os.path.join(backend_dir, '..', 'frontend', 'public', 'logo.png')) else None
+    icon=os.path.join(backend_dir, '..', 'frontend', 'public', 'appicon.ico') if os.path.exists(os.path.join(backend_dir, '..', 'frontend', 'public', 'appicon.ico')) else None
 )
