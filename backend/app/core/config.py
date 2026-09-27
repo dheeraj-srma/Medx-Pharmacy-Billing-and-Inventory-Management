@@ -38,6 +38,12 @@ class Settings(BaseSettings):
         "http://127.0.0.1:4173",
     ]
 
+    # File Uploads Directory
+    UPLOAD_DIR: str = os.environ.get("MEDX_UPLOAD_DIR", "uploads")
+
+    # Optional Desktop Token for Loopback IPC Security
+    MEDX_DESKTOP_SECRET: str | None = os.environ.get("MEDX_DESKTOP_SECRET", None)
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
@@ -50,10 +56,13 @@ class Settings(BaseSettings):
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         if self.DATABASE_URL:
-            # Normalize postgres:// to postgresql:// for SQLAlchemy compatibility
-            if self.DATABASE_URL.startswith("postgres://"):
-                return self.DATABASE_URL.replace("postgres://", "postgresql://", 1)
-            return self.DATABASE_URL
+            url = self.DATABASE_URL.strip()
+            # Normalize postgres:// and postgresql:// to postgresql+psycopg2:// for SQLAlchemy & psycopg2 compatibility
+            if url.startswith("postgres://"):
+                return url.replace("postgres://", "postgresql+psycopg2://", 1)
+            elif url.startswith("postgresql://"):
+                return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            return url
 
         # Strict Production Enforcement: Never silently switch to SQLite in production!
         if self.ENVIRONMENT == "production":
@@ -92,10 +101,11 @@ class Settings(BaseSettings):
         return self
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=os.environ.get("MEDX_CONFIG_FILE", ".env"),
         env_file_encoding="utf-8",
         extra="ignore"
     )
+
 
 
 settings = Settings()
