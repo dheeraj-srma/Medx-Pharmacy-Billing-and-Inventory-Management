@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useDataStore } from "../../../store/dataStore";
 import { 
   Table, 
@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Search, Activity } from "lucide-react";
 import { formatDateDDMMYYYY } from "@/lib/utils";
+import { searchAndRank, HighlightedText } from "@/lib/searchEngine";
 
 export default function SalesList() {
   const { sales, fetchSales } = useDataStore();
@@ -22,9 +23,15 @@ export default function SalesList() {
     fetchSales();
   }, [fetchSales]);
 
-  const filteredSales = salesData.filter(s => 
-    s.invoice_number.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredSales = useMemo(() => {
+    if (!search.trim()) return salesData;
+    const ranked = searchAndRank(
+      salesData,
+      search,
+      (s) => [s.invoice_number, s.customer?.name, s.payment_method]
+    );
+    return ranked.map((r) => r.item);
+  }, [salesData, search]);
 
   return (
     <div className="space-y-6">
@@ -72,11 +79,15 @@ export default function SalesList() {
             ) : (
               filteredSales.map((sale) => (
                 <TableRow key={sale.id} className="border-slate-800 hover:bg-slate-800/50">
-                  <TableCell className="font-mono text-sm font-medium text-slate-300">{sale.invoice_number}</TableCell>
+                  <TableCell className="font-mono text-sm font-medium text-slate-300">
+                    <HighlightedText text={sale.invoice_number} query={search} />
+                  </TableCell>
                   <TableCell className="text-sm text-slate-300">
                     {formatDateDDMMYYYY(sale.sale_date, true)}
                   </TableCell>
-                  <TableCell className="text-slate-300">{sale.customer?.name || "Walk-in"}</TableCell>
+                  <TableCell className="text-slate-300">
+                    <HighlightedText text={sale.customer?.name || "Walk-in"} query={search} />
+                  </TableCell>
                   <TableCell className="text-slate-300">{sale.payment_method}</TableCell>
                   <TableCell className="font-bold text-emerald-400">₹{Number(sale.grand_total ?? 0).toFixed(2)}</TableCell>
                   <TableCell>

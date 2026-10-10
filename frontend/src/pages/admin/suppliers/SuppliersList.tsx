@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useDataStore } from "../../../store/dataStore";
 import { 
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Edit, Building2, Phone, Mail, Activity } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { searchAndRank, HighlightedText } from "@/lib/searchEngine";
 
 export default function SuppliersList() {
   const { suppliers, fetchSuppliers } = useDataStore();
@@ -24,12 +25,15 @@ export default function SuppliersList() {
     fetchSuppliers();
   }, [fetchSuppliers]);
 
-  const filteredSuppliers = suppliersData.filter(s => 
-    s.name.toLowerCase().includes(search.toLowerCase()) || 
-    (s.company_name && s.company_name.toLowerCase().includes(search.toLowerCase())) ||
-    (s.phone && s.phone.includes(search)) ||
-    (s.gst_number && s.gst_number.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filteredSuppliers = useMemo(() => {
+    if (!search.trim()) return suppliersData;
+    const ranked = searchAndRank(
+      suppliersData,
+      search,
+      (s) => [s.name, s.company_name, s.phone, s.gst_number, s.email]
+    );
+    return ranked.map((r) => r.item);
+  }, [suppliersData, search]);
 
   return (
     <div className="space-y-6">
@@ -82,27 +86,29 @@ export default function SuppliersList() {
               filteredSuppliers.map((supplier) => (
                 <TableRow key={supplier.id} className="border-slate-800 hover:bg-slate-800/50">
                   <TableCell>
-                    <div className="font-medium text-slate-200">{supplier.name}</div>
+                    <div className="font-medium text-slate-200">
+                      <HighlightedText text={supplier.name} query={search} />
+                    </div>
                     <div className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
                       <Building2 size={12} className="text-slate-500" />
-                      {supplier.company_name || "Independent"}
+                      <HighlightedText text={supplier.company_name || "Independent"} query={search} />
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="text-sm text-slate-300 flex items-center gap-1.5">
                       <Phone size={12} className="text-slate-500" />
-                      {supplier.phone || "N/A"}
+                      <HighlightedText text={supplier.phone || "N/A"} query={search} />
                     </div>
                     {supplier.email && (
                       <div className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
                         <Mail size={12} className="text-slate-500" />
-                        {supplier.email}
+                        <HighlightedText text={supplier.email} query={search} />
                       </div>
                     )}
                   </TableCell>
                   <TableCell>
                     <span className="font-mono text-xs text-slate-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                      {supplier.gst_number || "—"}
+                      <HighlightedText text={supplier.gst_number || "—"} query={search} />
                     </span>
                   </TableCell>
                   <TableCell>

@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import api from "../../services/api";
 import { useAuthStore } from "../../store/authStore";
 import { useDataStore } from "../../store/dataStore";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,8 +33,10 @@ import { formatDateDDMMYYYY } from "@/lib/utils";
 export default function Settings() {
   const { showAlert, showConfirm } = useModal();
   const { user } = useAuthStore();
-  const { branches, fetchBranches } = useDataStore();
-  const [selectedSettingsBranchId, setSelectedSettingsBranchId] = useState<number>(1);
+  const { branches, fetchBranches, setBackdateBillingActive, selectedBranchId } = useDataStore();
+  const [selectedSettingsBranchId, setSelectedSettingsBranchId] = useState<number>(() => {
+    return selectedBranchId || user?.branch_id || 1;
+  });
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("store_profile");
@@ -44,10 +46,12 @@ export default function Settings() {
   }, [fetchBranches]);
 
   useEffect(() => {
-    if (user?.branch_id) {
+    if (selectedBranchId) {
+      setSelectedSettingsBranchId(selectedBranchId);
+    } else if (user?.branch_id) {
       setSelectedSettingsBranchId(user.branch_id);
     }
-  }, [user]);
+  }, [selectedBranchId, user]);
 
   const [storeConfig, setStoreConfig] = useState({
     storeName: "",
@@ -57,6 +61,7 @@ export default function Settings() {
     gstin: "",
     defaultTaxRate: "12",
     printGstin: true,
+    allowBackdatedBilling: false,
   });
 
   // Users & Roles state
@@ -110,6 +115,7 @@ export default function Settings() {
         gstin: res.data.gstin || "",
         defaultTaxRate: res.data.default_tax_rate?.toString() || "12",
         printGstin: res.data.print_gstin ?? true,
+        allowBackdatedBilling: res.data.allow_backdated_billing ?? false,
       });
     } catch (error) {
       console.error("Failed to fetch settings", error);
@@ -174,6 +180,7 @@ export default function Settings() {
         gstin: storeConfig.gstin || null,
         default_tax_rate: parseFloat(storeConfig.defaultTaxRate) || 0.0,
         print_gstin: storeConfig.printGstin,
+        allow_backdated_billing: storeConfig.allowBackdatedBilling,
       };
 
       const res = await api.put(`/settings/?branch_id=${selectedSettingsBranchId}`, payload);
@@ -185,13 +192,42 @@ export default function Settings() {
         gstin: res.data.gstin || "",
         defaultTaxRate: res.data.default_tax_rate?.toString() || "12",
         printGstin: res.data.print_gstin ?? true,
+        allowBackdatedBilling: res.data.allow_backdated_billing ?? false,
       });
+      setBackdateBillingActive(res.data.allow_backdated_billing ?? false);
       showAlert("Success", "Settings saved successfully!");
     } catch (error) {
       console.error("Failed to save settings", error);
       showAlert("Error", "Failed to save settings. Please try again.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleToggleBackdate = async (checked: boolean) => {
+    setStoreConfig((prev) => ({ ...prev, allowBackdatedBilling: checked }));
+    setBackdateBillingActive(checked);
+    try {
+      await api.put(`/settings/?branch_id=${selectedSettingsBranchId}`, {
+        allow_backdated_billing: checked,
+      });
+    } catch (error) {
+      console.error("Failed to auto-save backdate billing setting:", error);
+      setStoreConfig((prev) => ({ ...prev, allowBackdatedBilling: !checked }));
+      setBackdateBillingActive(!checked);
+      showAlert("Error", "Failed to update backdate billing setting on server.");
+    }
+  };
+
+  const handleTogglePrintGstin = async (checked: boolean) => {
+    setStoreConfig((prev) => ({ ...prev, printGstin: checked }));
+    try {
+      await api.put(`/settings/?branch_id=${selectedSettingsBranchId}`, {
+        print_gstin: checked,
+      });
+    } catch (error) {
+      console.error("Failed to auto-save print gstin setting:", error);
+      setStoreConfig((prev) => ({ ...prev, printGstin: !checked }));
     }
   };
 
@@ -486,6 +522,16 @@ export default function Settings() {
                   <Input id="gstin" name="gstin" value={storeConfig.gstin} onChange={handleChange} className="bg-slate-950 border-slate-800 text-white font-mono" />
                 </div>
               </CardContent>
+              <CardFooter className="flex justify-end border-t border-slate-800/80 pt-4 pb-4">
+                <Button 
+                  onClick={handleSave} 
+                  disabled={isSaving}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2"
+                >
+                  <Save size={16} />
+                  {isSaving ? "Saving..." : "Save Store Profile"}
+                </Button>
+              </CardFooter>
             </Card>
           )}
 
@@ -513,7 +559,7 @@ export default function Settings() {
                     <input 
                       type="checkbox" 
                       checked={storeConfig.printGstin} 
-                      onChange={(e) => setStoreConfig({ ...storeConfig, printGstin: e.target.checked })}
+                      onChange={(e) => handleTogglePrintGstin(e.target.checked)}
                       className="sr-only" 
                     />
                     <div className={`w-11 h-6 rounded-full transition-colors relative ${
@@ -525,7 +571,46 @@ export default function Settings() {
                     </div>
                   </label>
                 </div>
+
+                <div className="flex items-center justify-between p-4 bg-slate-950/20 rounded-lg border border-slate-800 max-w-xl">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Label className="text-slate-200">Backdate Billing</Label>
+                      {storeConfig.allowBackdatedBilling && (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500">Allow setting custom past dates when generating invoices in the billing terminal.</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={storeConfig.allowBackdatedBilling} 
+                      onChange={(e) => handleToggleBackdate(e.target.checked)}
+                      className="sr-only" 
+                    />
+                    <div className={`w-11 h-6 rounded-full transition-colors relative ${
+                      storeConfig.allowBackdatedBilling ? "bg-amber-600" : "bg-slate-800"
+                    }`}>
+                      <span className={`absolute top-[2px] left-[2px] bg-slate-300 rounded-full h-5 w-5 transition-all ${
+                        storeConfig.allowBackdatedBilling ? "translate-x-5 bg-white" : "translate-x-0"
+                      }`} />
+                    </div>
+                  </label>
+                </div>
               </CardContent>
+              <CardFooter className="flex justify-end border-t border-slate-800/80 pt-4 pb-4">
+                <Button 
+                  onClick={handleSave} 
+                  disabled={isSaving}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2"
+                >
+                  <Save size={16} />
+                  {isSaving ? "Saving..." : "Save Tax & Billing Settings"}
+                </Button>
+              </CardFooter>
             </Card>
           )}
 

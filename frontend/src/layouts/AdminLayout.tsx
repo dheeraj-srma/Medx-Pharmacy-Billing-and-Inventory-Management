@@ -20,8 +20,11 @@ import {
   Sun,
   Moon,
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  Lock,
+  X
 } from "lucide-react";
+import api from "../services/api";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 
@@ -34,10 +37,14 @@ export default function AdminLayout() {
     fetchSales, 
     fetchPurchases, 
     fetchDashboard,
+    fetchBatches,
+    fetchTransactions,
     branches,
     fetchBranches,
     selectedBranchId,
-    setSelectedBranchId
+    setSelectedBranchId,
+    backdateBillingActive,
+    setBackdateBillingActive
   } = useDataStore();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -79,18 +86,49 @@ export default function AdminLayout() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // Refetch when branch filter changes for superadmin
+  // Refetch when branch filter changes for superadmin or admin
   useEffect(() => {
-    if (user?.role === "superadmin") {
+    if (user?.role === "superadmin" || user?.role === "admin") {
       fetchDashboard(true);
       fetchProducts(true);
       fetchCustomers(true);
       fetchSuppliers(true);
       fetchSales(true);
       fetchPurchases(true);
+      fetchBatches(undefined, true);
+      fetchTransactions(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBranchId, user?.role]);
+
+  const effectiveBranchId = (user?.role === "superadmin" || user?.role === "admin")
+    ? (selectedBranchId || user?.branch_id || 1)
+    : (user?.branch_id || 1);
+
+  // Sync backdate billing setting when branch or route changes
+  useEffect(() => {
+    if (!user) return;
+    api.get("/settings/", { params: { branch_id: effectiveBranchId } })
+      .then((res) => {
+        if (res.data?.allow_backdated_billing !== undefined) {
+          setBackdateBillingActive(Boolean(res.data.allow_backdated_billing));
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to fetch branch settings for backdate billing in AdminLayout:", err);
+      });
+  }, [user, effectiveBranchId, location.pathname, setBackdateBillingActive]);
+
+  const handleDeactivateBackdate = async () => {
+    setBackdateBillingActive(false);
+    try {
+      await api.put(`/settings/?branch_id=${effectiveBranchId}`, {
+        allow_backdated_billing: false,
+      });
+    } catch (err) {
+      console.error("Failed to deactivate backdate billing from top bar:", err);
+    }
+  };
 
   useEffect(() => {
     const handleNetworkStatus = (e: Event) => {
@@ -127,7 +165,7 @@ export default function AdminLayout() {
         <div className="h-16 flex items-center justify-between px-4 border-b border-slate-800 shrink-0">
           {!isCollapsed && (
             <h2 className="text-xl font-bold flex items-center gap-2 text-white">
-              <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" /> MedEx
+              <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" /> MedX Pharmacy
             </h2>
           )}
           {isCollapsed && (
@@ -208,20 +246,56 @@ export default function AdminLayout() {
               <span className="text-xs font-semibold text-emerald-400 tracking-wide select-none">Syncing...</span>
             </div>
 
-            {user?.role === "superadmin" && (
+            {/* Backdate Billing Status (To the left of branch dropdown) */}
+            {backdateBillingActive && (
+              <div 
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/35 text-amber-300 shadow-sm shadow-amber-500/10 transition-all select-none"
+                title="Backdate billing is active in store settings."
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+                </span>
+                <span className="text-[11px] font-bold tracking-wider uppercase text-amber-300 whitespace-nowrap">
+                  Backdate Billing Active
+                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={handleDeactivateBackdate}
+                      className="text-amber-400/50 hover:text-amber-200 hover:bg-amber-500/20 p-0.5 rounded transition-colors ml-0.5"
+                      aria-label="Deactivate backdate billing"
+                    >
+                      <X size={12} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Deactivate Backdate Billing</TooltipContent>
+                </Tooltip>
+              </div>
+            )}
+
+            {(user?.role === "superadmin" || user?.role === "admin") ? (
               <select
-                value={selectedBranchId ?? ""}
+                value={selectedBranchId ?? 1}
                 onChange={(e) => {
-                  const val = e.target.value;
-                  setSelectedBranchId(val ? Number(val) : undefined);
+                  const val = Number(e.target.value) || 1;
+                  setSelectedBranchId(val);
                 }}
                 className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
               >
-                <option value="">All Branches</option>
                 {branches.map((b: any) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
+            ) : (
+              <div 
+                className="bg-slate-800/80 border border-slate-700/80 text-indigo-300 text-xs rounded-lg px-2.5 py-1.5 font-medium flex items-center gap-1.5"
+                title="Branch locked to staff operational rights"
+              >
+                <Warehouse size={13} className="text-indigo-400" />
+                <span>{branches.find((b: any) => b.id === (user?.branch_id || 1))?.name || `Branch ${user?.branch_id || 1}`}</span>
+                <Lock size={10} className="text-amber-400/80 ml-0.5" />
+              </div>
             )}
 
             <Tooltip>

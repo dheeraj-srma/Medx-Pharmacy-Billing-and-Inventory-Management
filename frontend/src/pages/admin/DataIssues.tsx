@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
+import { searchAndRank, HighlightedText } from "@/lib/searchEngine";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -123,16 +124,20 @@ export default function DataIssues() {
     navigate(meta.fixRoute(issue.entity_id));
   };
 
-  // Client-side search filter
-  const filteredIssues = issues.filter((i) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      i.entity_type.toLowerCase().includes(q) ||
-      i.field_name.toLowerCase().includes(q) ||
-      i.message.toLowerCase().includes(q)
-    );
-  });
+  // Client-side multi-tier search & rank filter
+  const filteredIssues = useMemo(() => {
+    return searchAndRank(
+      issues,
+      search,
+      (i) => [
+        ENTITY_META[i.entity_type]?.label ?? i.entity_type,
+        i.entity_type,
+        i.field_name,
+        i.message,
+        `#${i.entity_id}`,
+      ]
+    ).map((r) => r.item);
+  }, [issues, search]);
 
   return (
     <div className="space-y-6">
@@ -267,17 +272,21 @@ export default function DataIssues() {
                     <TableRow key={issue.id} className="border-slate-800/50 hover:bg-slate-800/20">
                       <TableCell className="py-2.5">
                         <div className="text-xs font-semibold text-slate-200">
-                          {meta?.label ?? issue.entity_type}
+                          <HighlightedText text={meta?.label ?? issue.entity_type} query={search} />
                         </div>
-                        <div className="text-[11px] text-slate-500 font-mono">#{issue.entity_id}</div>
+                        <div className="text-[11px] text-slate-500 font-mono">
+                          <HighlightedText text={`#${issue.entity_id}`} query={search} />
+                        </div>
                       </TableCell>
                       <TableCell className="py-2.5">
                         <span className="text-xs text-slate-300 font-mono bg-slate-800 px-1.5 py-0.5 rounded">
-                          {issue.field_name}
+                          <HighlightedText text={issue.field_name} query={search} />
                         </span>
                       </TableCell>
                       <TableCell className="py-2.5 max-w-xs">
-                        <p className="text-xs text-slate-400 line-clamp-2">{issue.message}</p>
+                        <p className="text-xs text-slate-400 line-clamp-2">
+                          <HighlightedText text={issue.message} query={search} />
+                        </p>
                       </TableCell>
                       <TableCell className="py-2.5">
                         <SeverityBadge severity={issue.severity} />

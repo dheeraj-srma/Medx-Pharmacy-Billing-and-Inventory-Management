@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useDataStore } from "../../../store/dataStore";
 import { 
   Table, 
@@ -9,6 +9,7 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { Search } from "lucide-react";
+import { searchAndRank, HighlightedText } from "@/lib/searchEngine";
 
 export default function CustomersList() {
   const { customers, fetchCustomers } = useDataStore();
@@ -20,10 +21,15 @@ export default function CustomersList() {
     fetchCustomers();
   }, [fetchCustomers]);
 
-  const filteredCustomers = customersData.filter(c => 
-    c.name.toLowerCase().includes(search.toLowerCase()) || 
-    (c.phone && c.phone.includes(search))
-  );
+  const filteredCustomers = useMemo(() => {
+    if (!search.trim()) return customersData;
+    const ranked = searchAndRank(
+      customersData,
+      search,
+      (c) => [c.name, c.phone, c.email]
+    );
+    return ranked.map((r) => r.item);
+  }, [customersData, search]);
 
   return (
     <div className="space-y-6">
@@ -66,9 +72,15 @@ export default function CustomersList() {
             ) : (
               filteredCustomers.map((customer) => (
                 <TableRow key={customer.id} className="border-slate-800 hover:bg-slate-800/50">
-                  <TableCell className="font-medium text-slate-200">{customer.name}</TableCell>
-                  <TableCell className="text-slate-300">{customer.phone || "N/A"}</TableCell>
-                  <TableCell className="text-slate-300">{customer.email || "N/A"}</TableCell>
+                  <TableCell className="font-medium text-slate-200">
+                    <HighlightedText text={customer.name} query={search} />
+                  </TableCell>
+                  <TableCell className="text-slate-300">
+                    <HighlightedText text={customer.phone || "N/A"} query={search} />
+                  </TableCell>
+                  <TableCell className="text-slate-300">
+                    <HighlightedText text={customer.email || "N/A"} query={search} />
+                  </TableCell>
                   <TableCell className="text-slate-500">
                     {new Date(customer.created_at).toLocaleDateString()}
                   </TableCell>

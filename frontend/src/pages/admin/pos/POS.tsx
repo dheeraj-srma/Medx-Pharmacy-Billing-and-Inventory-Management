@@ -10,9 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ShoppingCart, Trash2, Search, Printer, CheckCircle, Calendar, AlertCircle } from "lucide-react";
+import { ShoppingCart, Trash2, Search, Printer, CheckCircle, Calendar, AlertCircle, Warehouse, Lock } from "lucide-react";
 
 import { formatDateDDMMYYYY, checkLooseEligibility } from "@/lib/utils";
+import { searchAndRank, HighlightedText } from "@/lib/searchEngine";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -33,106 +34,36 @@ interface BatchItem {
   selling_price: number;
 }
 
-interface MatchResult {
-  batch: BatchItem;
-  tier: number;
-  matchIndex: number;
-  alphabeticalKey: string;
-}
-
-/**
- * Evaluates whether a batch contains the search query and assigns
- * its match tier and position. Returns null if there is no match
- * (strictly excluding items that do not contain the query).
- */
-function matchAndRankBatch(batch: BatchItem, rawQuery: string): MatchResult | null {
-  const q = rawQuery.trim().toLowerCase();
-  if (!q) return null;
-
-  const name = (batch.product_name || "").toLowerCase();
-  const generic = (batch.generic_name || "").toLowerCase();
-  const brand = (batch.brand || "").toLowerCase();
-  const sku = (batch.sku || "").toLowerCase();
-  const barcode = (batch.barcode || "").toLowerCase();
-  const batchNum = (batch.batch_number || "").toLowerCase();
-
-  // Strict inclusion check: must match at least one field
-  const hasMatch = 
-    name.includes(q) ||
-    generic.includes(q) ||
-    brand.includes(q) ||
-    sku.includes(q) ||
-    barcode.includes(q) ||
-    batchNum.includes(q);
-
-  if (!hasMatch) {
-    return null; // Do not display items that do not match
-  }
-
-  // 1. Exact match on Barcode or SKU
-  if (barcode === q || sku === q) {
-    return { batch, tier: 0, matchIndex: 0, alphabeticalKey: batch.product_name };
-  }
-
-  // 2. Exact match on Medicine Name
-  if (name === q) {
-    return { batch, tier: 1, matchIndex: 0, alphabeticalKey: batch.product_name };
-  }
-
-  // 3. Medicine Name starts with query at 1st alphabet (Index 0 - True Dictionary Prefix)
-  if (name.startsWith(q)) {
-    return { batch, tier: 2, matchIndex: 0, alphabeticalKey: batch.product_name };
-  }
-
-  // 4. Any Word in Medicine Name starts with query (e.g. "500" in "Paracetamol 500mg")
-  const nameWords = name.split(/[\s\-_\/()]+/);
-  const wordMatchIdx = nameWords.findIndex(w => w.startsWith(q));
-  if (wordMatchIdx !== -1) {
-    return { batch, tier: 3, matchIndex: wordMatchIdx, alphabeticalKey: batch.product_name };
-  }
-
-  // 5. Generic / Salt Name starts with query at Index 0
-  if (generic.startsWith(q)) {
-    return { batch, tier: 4, matchIndex: 0, alphabeticalKey: batch.generic_name || batch.product_name };
-  }
-
-  // 6. Brand Name starts with query at Index 0
-  if (brand.startsWith(q)) {
-    return { batch, tier: 5, matchIndex: 0, alphabeticalKey: batch.brand || batch.product_name };
-  }
-
-  // 7. Substring match inside Medicine Name ordered by earliest character index (1st, 2nd, 3rd, etc.)
-  const namePos = name.indexOf(q);
-  if (namePos !== -1) {
-    return { batch, tier: 6, matchIndex: namePos, alphabeticalKey: batch.product_name };
-  }
-
-  // 8. Substring match inside Generic / Salt Name ordered by character index
-  const genericPos = generic.indexOf(q);
-  if (genericPos !== -1) {
-    return { batch, tier: 7, matchIndex: genericPos, alphabeticalKey: batch.generic_name || batch.product_name };
-  }
-
-  // 9. Substring match inside Brand Name
-  const brandPos = brand.indexOf(q);
-  if (brandPos !== -1) {
-    return { batch, tier: 8, matchIndex: brandPos, alphabeticalKey: batch.brand || batch.product_name };
-  }
-
-  // 10. Substring match in Batch Number, SKU, or Barcode
-  const otherPos = Math.min(
-    batchNum.includes(q) ? batchNum.indexOf(q) : 999,
-    sku.includes(q) ? sku.indexOf(q) : 999,
-    barcode.includes(q) ? barcode.indexOf(q) : 999
-  );
-  return { batch, tier: 9, matchIndex: otherPos, alphabeticalKey: batch.product_name };
-}
+// Match result handled via centralized searchEngine
 
 export default function POS() {
-  const { showAlert, showConfirm } = useModal();
+  const { showAlert } = useModal();
   const { user } = useAuthStore();
-  const { branches, fetchBranches } = useDataStore();
-  const [selectedBranchId, setSelectedBranchId] = useState<number>(user?.branch_id || 1);
+  const { 
+    branches, 
+    fetchBranches, 
+    selectedBranchId: globalBranchId, 
+    setSelectedBranchId: setGlobalBranchId,
+    backdateBillingActive,
+    backdateBillingDate,
+    setBackdateBillingActive,
+    setBackdateBillingDate
+  } = useDataStore();
+
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+
+  // Active branch: Admin follows globalBranchId (falling back to user default or 1), Staff is strictly locked to user.branch_id
+  const activeBranchId = isAdmin 
+    ? (globalBranchId || user?.branch_id || 1)
+    : (user?.branch_id || 1);
+
+  // If admin arrives at POS without an active concrete branch selected, initialize it in dataStore
+  useEffect(() => {
+    if (isAdmin && !globalBranchId) {
+      setGlobalBranchId(user?.branch_id || 1);
+    }
+  }, [isAdmin, globalBranchId, user?.branch_id, setGlobalBranchId]);
+
   const [activeBatches, setActiveBatches] = useState<BatchItem[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [cart, setCart] = useState<any[]>([]);
@@ -158,19 +89,24 @@ export default function POS() {
   const [storeSettings, setStoreSettings] = useState<any>(null);
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [taxPercent, setTaxPercent] = useState<number>(0);
+  const [customSaleDate, setCustomSaleDate] = useState<string>("");
   
   const [printSnapshot, setPrintSnapshot] = useState<any>(null);
 
-  // Sync selectedBranchId when user object finishes loading
+  // Track previous branch to clear cart if active branch changes
+  const prevBranchRef = useRef(activeBranchId);
   useEffect(() => {
-    if (user?.branch_id) {
-      setSelectedBranchId(user.branch_id);
+    if (prevBranchRef.current !== activeBranchId) {
+      if (cart.length > 0) {
+        setCart([]);
+      }
+      prevBranchRef.current = activeBranchId;
     }
-  }, [user]);
+  }, [activeBranchId, cart.length]);
 
   useEffect(() => {
-    // Fetch available batches for the selected branch
-    api.get("/inventory/active-batches", { params: { branch_id: selectedBranchId } })
+    // Fetch available batches for the active branch
+    api.get("/inventory/active-batches", { params: { branch_id: activeBranchId } })
       .then(res => {
         const normalized = (res.data || []).map((b: any) => ({
           ...b,
@@ -181,35 +117,32 @@ export default function POS() {
         setActiveBatches(normalized);
       })
       .catch(console.error);
-  }, [selectedBranchId]);
+  }, [activeBranchId]);
 
   useEffect(() => {
-    // Fetch settings for the selected branch to print correct branch info on invoice
-    api.get("/settings/", { params: { branch_id: selectedBranchId } })
+    // Fetch settings for the active branch to print correct branch info on invoice
+    api.get("/settings/", { params: { branch_id: activeBranchId } })
       .then(res => {
         setStoreSettings(res.data);
         if (res.data?.default_tax_rate !== undefined) {
           setTaxPercent(res.data.default_tax_rate);
         }
+        if (res.data?.allow_backdated_billing) {
+          setBackdateBillingActive(true);
+          const effectiveDate = backdateBillingDate || new Date().toISOString().split("T")[0];
+          setBackdateBillingDate(effectiveDate);
+          setCustomSaleDate(effectiveDate);
+        } else {
+          setBackdateBillingActive(false);
+          setCustomSaleDate("");
+        }
       })
       .catch(console.error);
-  }, [selectedBranchId]);
+  }, [activeBranchId, backdateBillingDate, setBackdateBillingActive, setBackdateBillingDate]);
 
   useEffect(() => {
     api.get("/customers/").then(res => setCustomers(res.data)).catch(console.error);
   }, []);
-
-  const handleBranchChange = async (value: string) => {
-    const newBranchId = parseInt(value);
-    if (cart.length > 0) {
-      if (await showConfirm("Change Branch", "Changing the branch will clear your current cart. Do you want to proceed?")) {
-        setCart([]);
-        setSelectedBranchId(newBranchId);
-      }
-    } else {
-      setSelectedBranchId(newBranchId);
-    }
-  };
 
   // Close dropdown when clicked outside
   useEffect(() => {
@@ -225,39 +158,15 @@ export default function POS() {
     };
   }, []);
 
-  // Compute matched and ranked batches in strict dictionary matching order
+  // Compute matched and ranked batches: Exact matches -> Best matches -> Words in order
   const filteredBatches = useMemo(() => {
-    const q = search.trim();
-    if (!q) return [];
-
-    const matched: MatchResult[] = [];
-    for (const batch of activeBatches) {
-      const res = matchAndRankBatch(batch, q);
-      if (res) {
-        matched.push(res);
-      }
-    }
-
-    // Sort:
-    // 1. Tier (Prefix matches at index 0 come first)
-    // 2. Match Index (Alphabet position 1st, 2nd, 3rd, etc.)
-    // 3. Alphabetical order (Dictionary A -> Z)
-    // 4. Earliest Expiry (FEFO)
-    matched.sort((a, b) => {
-      if (a.tier !== b.tier) {
-        return a.tier - b.tier;
-      }
-      if (a.matchIndex !== b.matchIndex) {
-        return a.matchIndex - b.matchIndex;
-      }
-      const alpha = a.alphabeticalKey.localeCompare(b.alphabeticalKey, undefined, { sensitivity: 'base' });
-      if (alpha !== 0) {
-        return alpha;
-      }
-      return new Date(a.batch.expiry_date).getTime() - new Date(b.batch.expiry_date).getTime();
-    });
-
-    return matched.slice(0, 20).map(item => item.batch);
+    if (!search.trim()) return [];
+    const ranked = searchAndRank(
+      activeBatches,
+      search,
+      (b) => [b.product_name, b.generic_name, b.brand, b.barcode, b.sku, b.batch_number]
+    );
+    return ranked.slice(0, 30).map((r) => r.item);
   }, [activeBatches, search]);
 
   // Reset selected index and ensure dropdown opens when searching
@@ -279,6 +188,14 @@ export default function POS() {
   }, [selectedIndex, filteredBatches.length, isDropdownOpen]);
 
   const addToCart = (batch: BatchItem) => {
+    if (Number(batch.quantity_available || 0) <= 0) {
+      showAlert(
+        "Out of Stock",
+        `"${batch.product_name}" is currently out of stock (0 quantity available). Please add stock via Purchases or adjust stock in Inventory before billing.`
+      );
+      return;
+    }
+
     const eligibility = checkLooseEligibility(batch.pack_size, batch.product_name);
     const existingItem = cart.find(item => item.batch_id === batch.id);
     
@@ -559,7 +476,16 @@ export default function POS() {
         return;
       }
 
-      const payload = {
+      let formattedSaleDate: string | undefined = undefined;
+      const effectiveBackdate = backdateBillingDate || customSaleDate;
+      if ((storeSettings?.allow_backdated_billing || backdateBillingActive) && effectiveBackdate) {
+        const now = new Date();
+        const [y, m, d] = effectiveBackdate.split("-").map(Number);
+        const saleDt = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
+        formattedSaleDate = saleDt.toISOString();
+      }
+
+      const payload: any = {
         customer_id: finalCustomerId,
         total_amount: subtotal,
         tax_amount: taxAmount,
@@ -567,7 +493,8 @@ export default function POS() {
         round_off: roundOff,
         grand_total: grandTotal,
         payment_method: paymentMethod,
-        branch_id: selectedBranchId,
+        branch_id: activeBranchId,
+        ...(formattedSaleDate ? { sale_date: formattedSaleDate } : {}),
         items: cart.map(item => ({
           product_id: item.product_id,
           batch_id: item.batch_id,
@@ -606,7 +533,8 @@ export default function POS() {
         customerName: custName,
         customerPhone: custPhone,
         invoiceNumber: res.data.invoice_number,
-        date: formatDateDDMMYYYY(res.data.sale_date || res.data.created_at || Date.now(), true)
+        paymentMethod: res.data.payment_method || paymentMethod || "Cash",
+        date: formatDateDDMMYYYY(res.data.sale_date || res.data.created_at || (formattedSaleDate ?? Date.now()), true)
       });
 
       setCompletedSale(res.data);
@@ -616,9 +544,14 @@ export default function POS() {
       setWalkInName("");
       setWalkInPhone("");
       setMatchedCustomerId(null);
+      if (storeSettings?.allow_backdated_billing) {
+        setCustomSaleDate(new Date().toISOString().split("T")[0]);
+      } else {
+        setCustomSaleDate("");
+      }
       
       // Refresh batches to reflect new quantities
-      api.get("/inventory/active-batches", { params: { branch_id: selectedBranchId } })
+      api.get("/inventory/active-batches", { params: { branch_id: activeBranchId } })
         .then(r => {
           const normalized = (r.data || []).map((b: any) => ({
             ...b,
@@ -675,7 +608,7 @@ export default function POS() {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(22);
     doc.setTextColor(67, 56, 202); // #4338CA
-    doc.text("Med-X Pharmacy", textXOffset, 31);
+    doc.text(storeSettings?.store_name || "MedX Pharmacy", textXOffset, 31);
     
     const branchAddress = storeSettings?.address || "Jaipur, Rajasthan";
     const branchPhone = storeSettings?.phone || "";
@@ -710,29 +643,31 @@ export default function POS() {
     doc.setFillColor(247, 248, 252);
     doc.setDrawColor(230, 231, 238);
     doc.setLineWidth(0.5);
-    doc.rect(14, 50, 182, 22, "FD");
+    doc.rect(14, 48, 182, 27, "FD");
     
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
     doc.setTextColor(107, 114, 128);
-    doc.text("INVOICE DETAILS", 18, 55);
-    doc.text("CUSTOMER DETAILS", 115, 55);
+    doc.text("INVOICE DETAILS", 18, 54);
+    doc.text("CUSTOMER DETAILS", 115, 54);
     
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    doc.text("Invoice No:", 18, 61);
-    doc.text("Date:", 18, 67);
+    doc.text("Invoice No:", 18, 60);
+    doc.text("Date:", 18, 66);
+    doc.text("Payment Method:", 18, 72);
     
-    doc.text("Name:", 115, 61);
-    doc.text("Phone:", 115, 67);
+    doc.text("Name:", 115, 60);
+    doc.text("Phone:", 115, 66);
     
     doc.setFont("helvetica", "bold");
     doc.setTextColor(28, 30, 41);
-    doc.text(printSnapshot.invoiceNumber, 42, 61);
-    doc.text(printSnapshot.date, 42, 67);
+    doc.text(printSnapshot.invoiceNumber, 45, 60);
+    doc.text(printSnapshot.date, 45, 66);
+    doc.text(printSnapshot.paymentMethod || "Cash", 45, 72);
     
-    doc.text(printSnapshot.customerName, 130, 61);
-    doc.text(printSnapshot.customerPhone, 130, 67);
+    doc.text(printSnapshot.customerName, 130, 60);
+    doc.text(printSnapshot.customerPhone, 130, 66);
     
     const tableData = printSnapshot.cart.map((item: any, index: number) => [
       index + 1,
@@ -752,7 +687,7 @@ export default function POS() {
     ]);
 
     autoTable(doc, {
-      startY: 78,
+      startY: 79,
       head: [["#", "Product", "Batch", "Qty", "Unit Price", "Discount", "Tax", "Total Price"]],
       body: tableData,
       theme: 'grid',
@@ -788,40 +723,40 @@ export default function POS() {
     // Draw breakdown box
     doc.setFillColor(247, 248, 252);
     doc.setDrawColor(230, 231, 238);
-    doc.rect(120, finalY, 76, 32, "FD");
+    doc.rect(120, finalY, 76, 36, "FD");
     
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
     doc.setTextColor(100, 116, 139);
     
     // Row 1: Subtotal
-    doc.text("Subtotal:", 124, finalY + 7);
-    doc.text(`Rs. ${Number(printSnapshot.subtotal ?? 0).toFixed(2)}`, 192, finalY + 7, { align: "right" });
+    doc.text("Subtotal:", 124, finalY + 6.5);
+    doc.text(`Rs. ${Number(printSnapshot.subtotal ?? 0).toFixed(2)}`, 192, finalY + 6.5, { align: "right" });
     
     // Row 2: Discount
-    doc.text(`Discount (${printSnapshot.discountPercent}%):`, 124, finalY + 14);
-    doc.text(`-Rs. ${Number(printSnapshot.discountAmount ?? 0).toFixed(2)}`, 192, finalY + 14, { align: "right" });
+    doc.text(`Discount (${printSnapshot.discountPercent}%):`, 124, finalY + 13);
+    doc.text(`-Rs. ${Number(printSnapshot.discountAmount ?? 0).toFixed(2)}`, 192, finalY + 13, { align: "right" });
     
     // Row 3: Tax
-    doc.text(`Tax (${printSnapshot.taxPercent}%):`, 124, finalY + 21);
-    doc.text(`+Rs. ${Number(printSnapshot.taxAmount ?? 0).toFixed(2)}`, 192, finalY + 21, { align: "right" });
+    doc.text(`Tax (${printSnapshot.taxPercent}%):`, 124, finalY + 19.5);
+    doc.text(`+Rs. ${Number(printSnapshot.taxAmount ?? 0).toFixed(2)}`, 192, finalY + 19.5, { align: "right" });
 
     // Row 4: Round Off
     const roundOffVal = Number(printSnapshot.roundOff ?? 0);
-    doc.text("Round Off:", 124, finalY + 28);
-    doc.text(`${roundOffVal >= 0 ? "+Rs. " : "-Rs. "}${Math.abs(roundOffVal).toFixed(2)}`, 192, finalY + 28, { align: "right" });
+    doc.text("Round Off:", 124, finalY + 26);
+    doc.text(`${roundOffVal >= 0 ? "+Rs. " : "-Rs. "}${Math.abs(roundOffVal).toFixed(2)}`, 192, finalY + 26, { align: "right" });
     
     // Draw a divider line
     doc.setDrawColor(230, 231, 238);
-    doc.line(124, finalY + 31, 192, finalY + 31);
+    doc.line(124, finalY + 28.5, 192, finalY + 28.5);
     
     // Row 5: Total Pay
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(10.5);
+    doc.setFontSize(10);
     doc.setTextColor(67, 56, 202);
-    doc.text("Total Pay:", 124, finalY + 36);
-    doc.text(`Rs. ${Number(printSnapshot.grandTotal ?? 0).toFixed(2)}`, 192, finalY + 36, { align: "right" });
-    
+    doc.text("Total Pay:", 124, finalY + 33);
+    doc.text(`Rs. ${Number(printSnapshot.grandTotal ?? 0).toFixed(2)}`, 192, finalY + 33, { align: "right" });
+
     doc.setDrawColor(230, 231, 238);
     doc.line(14, finalY + 45, 196, finalY + 45);
     
@@ -834,10 +769,11 @@ export default function POS() {
     doc.text("1. Medicines once sold cannot be returned without a valid prescription/bill.", 14, finalY + 46);
     doc.text("2. Please store medicines under recommended conditions.", 14, finalY + 50);
     
+    const storeDisplayName = storeSettings?.store_name || "MedX Pharmacy";
     doc.setFont("helvetica", "bold");
     doc.setTextColor(67, 56, 202);
     doc.setFontSize(10);
-    doc.text("Thank you for choosing Med-X Pharmacy!", 14, finalY + 58);
+    doc.text(`Thank you for choosing ${storeDisplayName}!`, 14, finalY + 58);
 
     // Bottom Footer Strip
     doc.setFillColor(67, 56, 202);
@@ -845,20 +781,6 @@ export default function POS() {
     
     doc.save(`Invoice_${printSnapshot.invoiceNumber}.pdf`);
   };
-
-  if (user?.role === "superadmin") {
-    return (
-      <div className="max-w-2xl mx-auto mt-10">
-        <Card className="text-center p-8 bg-slate-900 border-slate-800 shadow-2xl shadow-black/50 text-white">
-          <AlertCircle className="mx-auto text-amber-500 mb-4 animate-bounce" size={64} />
-          <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
-          <p className="text-slate-400 mb-6">
-            Superadmin accounts have read-only access and are not allowed to create sales invoices or access the billing terminal.
-          </p>
-        </Card>
-      </div>
-    );
-  }
 
   if (completedSale) {
     return (
@@ -883,7 +805,33 @@ export default function POS() {
   return (
     <div className="grid grid-cols-12 gap-6 h-[calc(100vh-8rem)]">
       {/* Left side: Search and Cart */}
-      <div className="col-span-8 flex flex-col space-y-4">
+      <div className="col-span-8 flex flex-col space-y-3">
+        {/* Active Branch Dispensing Status Banner */}
+        <div className="flex items-center justify-between px-1 py-1 rounded-lg bg-slate-900/60 border border-slate-800/80 px-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 font-medium">Dispensing From:</span>
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 flex items-center gap-1.5">
+              <Warehouse size={12} className="text-indigo-400" />
+              {branches.find((b: any) => b.id === activeBranchId)?.name || `Branch ${activeBranchId}`}
+            </span>
+            {isAdmin ? (
+              <span className="text-[11px] text-slate-500 font-medium">
+                (Admin Multi-Branch Active)
+              </span>
+            ) : (
+              <span className="text-[11px] text-amber-400/80 font-medium flex items-center gap-1">
+                <Lock size={10} /> Locked to your assigned branch
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-slate-400 font-mono flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="text-emerald-400 font-bold">{activeBatches.length}</span>
+              <span>batches in stock</span>
+            </div>
+          </div>
+        </div>
         
         {/* Search Bar with Ranked Dropdown */}
         <div ref={searchContainerRef} className="relative">
@@ -931,7 +879,9 @@ export default function POS() {
                       >
                         <div className="space-y-1 flex-1 pr-4">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-slate-100 text-sm">{batch.product_name}</span>
+                            <span className="font-semibold text-slate-100 text-sm">
+                              <HighlightedText text={batch.product_name} query={search} />
+                            </span>
                             {batch.generic_name && (
                               <span className="text-xs text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
                                 {batch.generic_name}
@@ -947,9 +897,13 @@ export default function POS() {
                             <span className="font-mono bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 text-slate-300">
                               Batch: {batch.batch_number}
                             </span>
-                            <span className={`flex items-center gap-1 ${isExpiringSoon ? "text-amber-400 font-medium" : "text-slate-400"}`}>
-                              <Calendar size={12} /> Exp: {formatDateDDMMYYYY(batch.expiry_date)}
-                            </span>
+                            {new Date(batch.expiry_date).getFullYear() >= 9999 ? (
+                              <span className="text-slate-500 text-xs italic">Exp: Not Set</span>
+                            ) : (
+                              <span className={`flex items-center gap-1 ${isExpiringSoon ? "text-amber-400 font-medium" : "text-slate-400"}`}>
+                                <Calendar size={12} /> Exp: {formatDateDDMMYYYY(batch.expiry_date)}
+                              </span>
+                            )}
                             {batch.pack_size && (
                               <span className="text-slate-400">• {batch.pack_size}</span>
                             )}
@@ -960,12 +914,16 @@ export default function POS() {
                           <div className="font-bold text-emerald-400 text-base">₹{Number(batch.selling_price || 0).toFixed(2)}</div>
                           <Badge 
                             variant="outline" 
-                            className={Number(batch.quantity_available || 0) <= 10 
+                            className={Number(batch.quantity_available || 0) <= 0
+                              ? "bg-rose-500/10 text-rose-400 border-rose-500/20 text-[11px]"
+                              : Number(batch.quantity_available || 0) <= 10 
                               ? "bg-amber-500/10 text-amber-400 border-amber-500/20 text-[11px]" 
                               : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[11px]"
                             }
                           >
-                            {Number(batch.quantity_available || 0)} in stock
+                            {Number(batch.quantity_available || 0) <= 0
+                              ? "Out of Stock (0)"
+                              : `${Number(batch.quantity_available || 0)} in stock`}
                           </Badge>
                         </div>
                       </li>
@@ -975,7 +933,7 @@ export default function POS() {
               ) : (
                 <div className="p-6 text-center text-slate-400 space-y-1">
                   <AlertCircle className="mx-auto text-slate-500 mb-1" size={24} />
-                  <p className="font-medium text-slate-300">No matching in-stock medicine found</p>
+                  <p className="font-medium text-slate-300">No matching medicine found</p>
                   <p className="text-xs text-slate-500">Check spelling or search by generic name, salt, or batch number.</p>
                 </div>
               )}
@@ -1124,20 +1082,52 @@ export default function POS() {
           <CardContent className="flex-1 flex flex-col p-4 justify-between gap-3 overflow-hidden">
             
             <div className="space-y-3">
-              {/* Billing Branch */}
-              <div className="space-y-1">
-                <Label className="text-xs font-medium text-slate-300">Billing Branch</Label>
-                <Select value={selectedBranchId.toString()} onValueChange={handleBranchChange}>
-                  <SelectTrigger className="h-8.5 text-xs bg-slate-950 border-slate-700 text-white">
-                    <SelectValue placeholder="Select Branch" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-700 text-white">
-                    {branches.map((b: any) => (
-                      <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {/* Billing Branch Info Label */}
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/80 border border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Warehouse size={14} className="text-indigo-400" />
+                  <span className="text-xs text-slate-400 font-medium">Billing Branch:</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-0.5 rounded-md">
+                    {branches.find((b: any) => b.id === activeBranchId)?.name || `Branch ${activeBranchId}`}
+                  </span>
+                  {!isAdmin && (
+                    <span title="Locked to your assigned branch" className="text-amber-400/80 flex items-center">
+                      <Lock size={11} />
+                    </span>
+                  )}
+                </div>
               </div>
+
+              {/* Backdate Billing Custom Date Picker (Visible when feature is ON) */}
+              {(storeSettings?.allow_backdated_billing || backdateBillingActive) && (
+                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="custom-sale-date" className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
+                      <Calendar size={13} className="text-amber-400" />
+                      Invoice Billing Date
+                    </Label>
+                    <span className="text-[10px] text-amber-400/90 font-medium bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30">
+                      Backdate Active
+                    </span>
+                  </div>
+                  <Input 
+                    id="custom-sale-date"
+                    type="date"
+                    max={new Date().toISOString().split("T")[0]}
+                    value={backdateBillingDate || customSaleDate || new Date().toISOString().split("T")[0]}
+                    onChange={(e) => {
+                      setCustomSaleDate(e.target.value);
+                      setBackdateBillingDate(e.target.value);
+                    }}
+                    className="h-8.5 text-xs bg-slate-950 border-amber-500/40 text-amber-200 focus:ring-1 focus:ring-amber-500"
+                  />
+                  <p className="text-[10px] text-amber-300/70">
+                    Bill & stock ledger will be recorded on {backdateBillingDate || customSaleDate || "selected date"}.
+                  </p>
+                </div>
+              )}
 
               {/* Customer Selection */}
               <div className="space-y-1">

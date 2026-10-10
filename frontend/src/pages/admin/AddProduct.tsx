@@ -28,6 +28,7 @@ const productSchema = z.object({
   category_id: z.string().optional(),
   description: z.string().optional(),
   mrp: z.coerce.number().min(0, "MRP must be positive"),
+  cost_price: z.coerce.number().min(0, "Cost price must be non-negative").optional(),
   selling_price: z.coerce.number().min(0, "Selling price must be positive"),
   pack_size: z.string().optional(),
   barcode: z.string().optional(),
@@ -60,6 +61,7 @@ export default function AddProduct() {
     resolver: zodResolver(productSchema),
     defaultValues: {
       reorder_level: 10,
+      cost_price: 0,
       gst_percentage: 0,
       is_active: true,
     }
@@ -90,6 +92,7 @@ export default function AddProduct() {
             category_id: p.category_id ? p.category_id.toString() : "",
             description: p.description || "",
             mrp: p.mrp || 0,
+            cost_price: p.cost_price ?? 0,
             selling_price: p.selling_price || 0,
             pack_size: p.pack_size || "",
             barcode: p.barcode || "",
@@ -140,6 +143,7 @@ export default function AddProduct() {
           category_id: data.category_id ? parseInt(data.category_id) : null,
           description: data.description || null,
           mrp: data.mrp,
+          cost_price: data.cost_price ?? null,
           selling_price: data.selling_price,
           pack_size: data.pack_size || null,
           barcode: data.barcode || null,
@@ -182,6 +186,11 @@ export default function AddProduct() {
 
         if (imageFile) {
           formData.append("image", imageFile);
+        }
+
+        // Ensure initial_stock defaults to 0 if not provided
+        if (!formData.has("initial_stock") || formData.get("initial_stock") === "") {
+          formData.set("initial_stock", "0");
         }
         // Note: batch_number is intentionally NOT auto-generated here.
         // If missing, the backend validation pipeline will assign a safe placeholder
@@ -372,82 +381,149 @@ export default function AddProduct() {
               </CardContent>
             </Card>
 
-            {/* Pricing & Barcode */}
+            {/* Pricing & Identification */}
             <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10">
               <CardHeader>
                 <CardTitle className="text-white text-lg">Pricing & Identification</CardTitle>
+                <CardDescription className="text-slate-400 text-xs">
+                  Correlated Costing, Selling, MRP, and Tax calculations.
+                </CardDescription>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="mrp" className="text-slate-300">MRP (₹) *</Label>
-                  <Input 
-                    id="mrp" 
-                    type="number" 
-                    step="0.01" 
-                    {...register("mrp")} 
-                    placeholder="0.00" 
-                    className="bg-slate-950 border-slate-700 text-white placeholder-slate-500 font-mono"
-                  />
-                  {errors.mrp && <p className="text-xs text-rose-400">{errors.mrp.message as string}</p>}
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="mrp" className="text-slate-300">MRP (₹) *</Label>
+                    <Input 
+                      id="mrp" 
+                      type="number" 
+                      step="0.01" 
+                      {...register("mrp")} 
+                      placeholder="0.00" 
+                      className="bg-slate-950 border-slate-700 text-white placeholder-slate-500 font-mono"
+                    />
+                    {errors.mrp && <p className="text-xs text-rose-400">{errors.mrp.message as string}</p>}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="cost_price" className="text-slate-300">Cost / Purchase Price (₹)</Label>
+                    <Input 
+                      id="cost_price" 
+                      type="number" 
+                      step="0.01" 
+                      {...register("cost_price")} 
+                      placeholder="e.g. 70.00" 
+                      className="bg-slate-950 border-slate-700 text-amber-400 placeholder-slate-500 font-mono font-medium"
+                    />
+                    <p className="text-[10px] text-slate-500">Retail acquisition rate per pack/unit.</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="selling_price" className="text-slate-300">Selling Price (₹) *</Label>
+                    <Input 
+                      id="selling_price" 
+                      type="number" 
+                      step="0.01" 
+                      {...register("selling_price")} 
+                      placeholder="0.00" 
+                      className="bg-slate-950 border-slate-700 text-emerald-400 placeholder-slate-500 font-mono font-semibold"
+                    />
+                    {errors.selling_price && <p className="text-xs text-rose-400">{errors.selling_price.message as string}</p>}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="selling_price" className="text-slate-300">Selling Price (₹) *</Label>
-                  <Input 
-                    id="selling_price" 
-                    type="number" 
-                    step="0.01" 
-                    {...register("selling_price")} 
-                    placeholder="0.00" 
-                    className="bg-slate-950 border-slate-700 text-emerald-400 placeholder-slate-500 font-mono font-semibold"
-                  />
-                  {errors.selling_price && <p className="text-xs text-rose-400">{errors.selling_price.message as string}</p>}
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="pack_size" className="text-slate-300">Pack Size</Label>
-                  <Input 
-                    id="pack_size" 
-                    {...register("pack_size")} 
-                    placeholder="e.g. 10 Tablets / Strip, 100ml Bottle" 
-                    className="bg-slate-950 border-slate-700 text-white placeholder-slate-500"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="barcode" className="text-slate-300">Barcode</Label>
-                  <Input 
-                    id="barcode" 
-                    {...register("barcode")} 
-                    placeholder="Scan or enter barcode" 
-                    className="bg-slate-950 border-slate-700 text-white placeholder-slate-500 font-mono"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sku" className="text-slate-300">SKU</Label>
-                  <Input 
-                    id="sku" 
-                    {...register("sku")} 
-                    placeholder="e.g. MED-PARA-500" 
-                    className="bg-slate-950 border-slate-700 text-white placeholder-slate-500 font-mono"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="hsn_code" className="text-slate-300">HSN Code</Label>
-                  <Input 
-                    id="hsn_code" 
-                    {...register("hsn_code")} 
-                    placeholder="e.g. 300490" 
-                    className="bg-slate-950 border-slate-700 text-white placeholder-slate-500 font-mono"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="gst_percentage" className="text-slate-300">GST Rate (%)</Label>
-                  <Input 
-                    id="gst_percentage" 
-                    type="number" 
-                    step="0.1" 
-                    {...register("gst_percentage")} 
-                    placeholder="12" 
-                    className="bg-slate-950 border-slate-700 text-white placeholder-slate-500"
-                  />
+
+                {/* Correlated Margin & Tax Summary Banner */}
+                {(() => {
+                  const mrpVal = Number(watch("mrp") || 0);
+                  const spVal = Number(watch("selling_price") || 0);
+                  const costVal = Number(watch("cost_price") || (spVal > 0 ? spVal * 0.70 : 0));
+                  const gstVal = Number(watch("gst_percentage") || 0);
+                  const profitVal = spVal - costVal;
+                  const marginPct = spVal > 0 ? ((profitVal / spVal) * 100).toFixed(1) : "0.0";
+                  const basePrice = gstVal > 0 ? (spVal / (1 + gstVal / 100)) : spVal;
+                  const unitTax = spVal - basePrice;
+
+                  return (
+                    <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-lg text-xs space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400">Gross Margin:</span>
+                          <span className={`font-mono font-bold ${profitVal >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                            ₹{profitVal.toFixed(2)} ({marginPct}%)
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-slate-400">
+                          <span>Base Pre-Tax: <strong className="text-slate-200 font-mono">₹{basePrice.toFixed(2)}</strong></span>
+                          <span>|</span>
+                          <span>GST ({gstVal}%): <strong className="text-indigo-400 font-mono">₹{unitTax.toFixed(2)}</strong></span>
+                        </div>
+                      </div>
+
+                      {spVal > mrpVal && mrpVal > 0 && (
+                        <div className="text-rose-400 font-semibold flex items-center gap-1.5 text-[11px]">
+                          <AlertTriangle size={13} /> Selling price cannot exceed MRP by Indian trade laws.
+                        </div>
+                      )}
+                      {costVal > spVal && spVal > 0 && (
+                        <div className="text-amber-400 font-medium flex items-center gap-1.5 text-[11px]">
+                          <AlertTriangle size={13} /> Warning: Cost price exceeds selling price (Negative margin).
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                  <div className="space-y-2">
+                    <Label htmlFor="gst_percentage" className="text-slate-300">GST Rate (%)</Label>
+                    <Input 
+                      id="gst_percentage" 
+                      type="number" 
+                      step="0.1" 
+                      {...register("gst_percentage")} 
+                      placeholder="12" 
+                      className="bg-slate-950 border-slate-700 text-white placeholder-slate-500 font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="pack_size" className="text-slate-300">Pack Size</Label>
+                    <Input 
+                      id="pack_size" 
+                      {...register("pack_size")} 
+                      placeholder="e.g. 10 Tablets / Strip, 100ml Bottle" 
+                      className="bg-slate-950 border-slate-700 text-white placeholder-slate-500"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="barcode" className="text-slate-300">Barcode</Label>
+                    <Input 
+                      id="barcode" 
+                      {...register("barcode")} 
+                      placeholder="Scan or enter barcode" 
+                      className="bg-slate-950 border-slate-700 text-white placeholder-slate-500 font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="sku" className="text-slate-300">SKU</Label>
+                    <Input 
+                      id="sku" 
+                      {...register("sku")} 
+                      placeholder="e.g. MED-PARA-500" 
+                      className="bg-slate-950 border-slate-700 text-white placeholder-slate-500 font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="hsn_code" className="text-slate-300">HSN Code</Label>
+                    <Input 
+                      id="hsn_code" 
+                      {...register("hsn_code")} 
+                      placeholder="e.g. 300490" 
+                      className="bg-slate-950 border-slate-700 text-white placeholder-slate-500 font-mono"
+                    />
+                  </div>
                 </div>
               </CardContent>
             </Card>

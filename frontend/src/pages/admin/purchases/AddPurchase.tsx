@@ -1,5 +1,5 @@
 import { useModal } from "@/providers/ModalProvider";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { ArrowLeft, Save, Plus, Trash2, AlertCircle } from "lucide-react";
 
 const purchaseItemSchema = z.object({
@@ -47,6 +47,28 @@ export default function AddPurchase() {
     api.get("/suppliers/").then(res => setSuppliers(res.data)).catch(console.error);
     api.get("/products/").then(res => setProducts(res.data)).catch(console.error);
   }, []);
+
+  // Convert suppliers to SearchableSelect options
+  const supplierOptions = useMemo(() => {
+    return suppliers.map((s) => ({
+      value: s.id,
+      label: s.name,
+      subLabel: s.company_name ? s.company_name : (s.phone ? `Ph: ${s.phone}` : undefined),
+      badge: s.gstin ? `GST: ${s.gstin}` : undefined,
+      raw: s,
+    }));
+  }, [suppliers]);
+
+  // Convert products to SearchableSelect options
+  const productOptions = useMemo(() => {
+    return products.map((p) => ({
+      value: p.id,
+      label: p.name,
+      subLabel: [p.generic_name, p.brand].filter(Boolean).join(" • ") || undefined,
+      badge: p.pack_size ? p.pack_size : (p.sku ? `SKU: ${p.sku}` : undefined),
+      raw: p,
+    }));
+  }, [products]);
 
   const { register, control, handleSubmit, formState: { errors }, setValue, watch } = useForm<PurchaseFormValues>({
     resolver: zodResolver(purchaseSchema) as any,
@@ -107,10 +129,13 @@ export default function AddPurchase() {
       <div className="max-w-2xl mx-auto mt-10">
         <Card className="text-center p-8 bg-slate-900 border-slate-800 shadow-2xl shadow-black/50 text-white">
           <AlertCircle className="mx-auto text-amber-500 mb-4 animate-bounce" size={64} />
-          <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
+          <h2 className="text-2xl font-bold text-white mb-2">Operational Rights On Hold</h2>
           <p className="text-slate-400 mb-6">
-            Superadmin accounts have read-only access and are not allowed to register inward stock purchases.
+            Superadmin accounts have read-only access and are not allowed to register inward stock purchases. Please log in with a branch account to record stock purchases.
           </p>
+          <Button asChild className="bg-slate-800 hover:bg-slate-700 text-white">
+            <Link to="/admin/purchases">Back to Purchases</Link>
+          </Button>
         </Card>
       </div>
     );
@@ -133,16 +158,13 @@ export default function AddPurchase() {
           <CardContent className="grid grid-cols-4 gap-6 text-slate-200">
             <div className="space-y-2">
               <Label htmlFor="supplier_id">Supplier *</Label>
-              <Select onValueChange={(val) => setValue("supplier_id", parseInt(val))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select supplier" />
-                </SelectTrigger>
-                <SelectContent>
-                  {suppliers.map(s => (
-                    <SelectItem key={s.id} value={s.id.toString()}>{s.name} {s.company_name ? `(${s.company_name})` : ''}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={watch("supplier_id")}
+                onChange={(val) => setValue("supplier_id", Number(val), { shouldValidate: true })}
+                options={supplierOptions}
+                placeholder="Search & select supplier..."
+                error={Boolean(errors.supplier_id)}
+              />
               {errors.supplier_id && <p className="text-sm text-red-500">{errors.supplier_id.message}</p>}
             </div>
 
@@ -192,16 +214,31 @@ export default function AddPurchase() {
                 <div className="grid grid-cols-4 gap-4 pr-10">
                   <div className="col-span-2 space-y-2">
                     <Label>Product *</Label>
-                    <Select onValueChange={(val) => setValue(`items.${index}.product_id`, parseInt(val))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select product" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.map(p => (
-                          <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={watch(`items.${index}.product_id`)}
+                      onChange={(val, opt) => {
+                        setValue(`items.${index}.product_id`, Number(val), { shouldValidate: true });
+                        const p = opt?.raw;
+                        if (p) {
+                          // Auto-fill product default pricing if empty or 0
+                          const currentCost = watch(`items.${index}.purchase_price`);
+                          const currentMrp = watch(`items.${index}.mrp`);
+                          const currentSelling = watch(`items.${index}.selling_price`);
+                          if ((!currentCost || Number(currentCost) === 0) && p.cost_price) {
+                            setValue(`items.${index}.purchase_price`, Number(p.cost_price));
+                          }
+                          if ((!currentMrp || Number(currentMrp) === 0) && p.mrp) {
+                            setValue(`items.${index}.mrp`, Number(p.mrp));
+                          }
+                          if ((!currentSelling || Number(currentSelling) === 0) && p.selling_price) {
+                            setValue(`items.${index}.selling_price`, Number(p.selling_price));
+                          }
+                        }
+                      }}
+                      options={productOptions}
+                      placeholder="Search & select medicine..."
+                      error={Boolean(errors.items?.[index]?.product_id)}
+                    />
                     {errors.items?.[index]?.product_id && <p className="text-sm text-red-500">{errors.items[index]?.product_id?.message}</p>}
                   </div>
 

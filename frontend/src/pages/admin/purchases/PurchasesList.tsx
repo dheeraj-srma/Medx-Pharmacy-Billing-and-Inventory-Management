@@ -1,5 +1,5 @@
 import { useModal } from "@/providers/ModalProvider";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { useDataStore } from "../../../store/dataStore";
@@ -19,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { formatDateDDMMYYYY } from "@/lib/utils";
+import { searchAndRank, HighlightedText } from "@/lib/searchEngine";
 
 export default function PurchasesList() {
   const { showAlert } = useModal();
@@ -77,11 +78,15 @@ export default function PurchasesList() {
     };
   }, [selectedPurchaseId]);
 
-  const filteredPurchases = purchasesData.filter(p => 
-    (p.invoice_number && p.invoice_number.toLowerCase().includes(search.toLowerCase())) ||
-    (p.supplier?.name && p.supplier.name.toLowerCase().includes(search.toLowerCase())) ||
-    (p.supplier?.company_name && p.supplier.company_name.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filteredPurchases = useMemo(() => {
+    if (!search.trim()) return purchasesData;
+    const ranked = searchAndRank(
+      purchasesData,
+      search,
+      (p) => [p.invoice_number, p.supplier?.name, p.supplier?.company_name, p.supplier?.phone]
+    );
+    return ranked.map((r) => r.item);
+  }, [purchasesData, search]);
 
   const loadLogo = (): Promise<HTMLImageElement> => {
     return new Promise((resolve, reject) => {
@@ -289,7 +294,9 @@ export default function PurchasesList() {
               filteredPurchases.map((purchase) => (
                 <TableRow key={purchase.id} className="border-slate-800 hover:bg-slate-800/50">
                   <TableCell>
-                    <div className="font-mono text-sm font-semibold text-slate-200">{purchase.invoice_number || "N/A"}</div>
+                    <div className="font-mono text-sm font-semibold text-slate-200">
+                      <HighlightedText text={purchase.invoice_number || "N/A"} query={search} />
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="text-sm text-slate-300 flex items-center gap-1.5">
@@ -298,11 +305,13 @@ export default function PurchasesList() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="font-medium text-slate-200">{purchase.supplier?.name || `Supplier #${purchase.supplier_id}`}</div>
+                    <div className="font-medium text-slate-200">
+                      <HighlightedText text={purchase.supplier?.name || `Supplier #${purchase.supplier_id}`} query={search} />
+                    </div>
                     {purchase.supplier?.company_name && (
                       <div className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
                         <Building2 size={11} className="text-slate-500" />
-                        {purchase.supplier.company_name}
+                        <HighlightedText text={purchase.supplier.company_name} query={search} />
                       </div>
                     )}
                   </TableCell>
