@@ -35,11 +35,6 @@ def create_return(
     Validates returned quantities against original sale, computes refund,
     restocks unexpired batches, creates inventory ledger entries, and updates sale status.
     """
-    if current_user.role == RoleEnum.SUPERADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Superadmin accounts have read-only access and cannot process returns."
-        )
     return ReturnsService.process_return(db, return_in, current_user)
 
 @router.get("/{return_id}", response_model=ReturnResponse)

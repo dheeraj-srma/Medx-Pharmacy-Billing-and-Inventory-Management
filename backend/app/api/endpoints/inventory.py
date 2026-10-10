@@ -312,12 +312,6 @@ def adjust_stock(
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
-    if current_user.role in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Superuser / Admin operational transaction rights are currently on hold. Stock adjustments must be performed using branch staff accounts."
-        )
-        
     batch = db.query(InventoryBatch).filter(
         InventoryBatch.id == adjust_in.batch_id
     ).with_for_update().first()
@@ -325,11 +319,12 @@ def adjust_stock(
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
         
-    if batch.branch_id != current_user.branch_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied. Batch does not belong to your branch."
-        )
+    if current_user.role not in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN):
+        if batch.branch_id != current_user.branch_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied. Batch does not belong to your branch."
+            )
         
     if adjust_in.quantity_change < 0 and batch.quantity_available < abs(adjust_in.quantity_change):
         raise HTTPException(status_code=400, detail="Cannot adjust below available quantity")
@@ -345,7 +340,7 @@ def adjust_stock(
         reference_id=str(current_user.id),
         notes=adjust_in.notes or "Manual adjustment",
         user_id=current_user.id,
-        branch_id=current_user.branch_id,
+        branch_id=batch.branch_id,
         timestamp=datetime.now(IST)
     )
     db.add(batch)
@@ -357,7 +352,7 @@ def adjust_stock(
         db=db,
         action="STOCK_ADJUSTED",
         user_id=current_user.id,
-        branch_id=current_user.branch_id,
+        branch_id=batch.branch_id,
         entity_type="inventory_batch",
         entity_id=batch.id,
         new_value={"quantity_change": str(adjust_in.quantity_change), "type": adjust_in.transaction_type.value, "notes": adjust_in.notes}

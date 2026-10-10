@@ -36,11 +36,6 @@ def create_purchase(
     Recalculates totals in Decimal, locks and updates inventory batches,
     and records immutable inventory ledger transactions.
     """
-    if current_user.role == RoleEnum.SUPERADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Superadmin accounts have read-only access. Purchases must be recorded using branch staff or admin accounts."
-        )
     return PurchaseService.create_purchase(db, purchase, current_user)
 
 @router.get("/{purchase_id}", response_model=PurchaseSchema)

@@ -47,13 +47,10 @@ def create_customer(
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
-    if current_user.role == RoleEnum.SUPERADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Superadmin has read-only access and cannot create customers."
-        )
-        
-    user_branch_id = deps.require_user_branch_id(current_user)
+    if current_user.role in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN):
+        user_branch_id = customer.branch_id if customer.branch_id else (current_user.branch_id or 1)
+    else:
+        user_branch_id = deps.require_user_branch_id(current_user)
     phone_raw, phone_norm = normalize_phone(customer.phone)
     
     # Deduplication check by phone_normalized within branch
@@ -118,19 +115,13 @@ def update_customer(
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
-    if current_user.role == RoleEnum.SUPERADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Superadmin has read-only access and cannot update customers."
-        )
-        
     db_customer = db.query(Customer).filter(
         Customer.id == customer_id
     ).first()
     if not db_customer:
         raise HTTPException(status_code=404, detail="Customer not found")
         
-    if db_customer.branch_id != current_user.branch_id:
+    if current_user.role not in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN) and db_customer.branch_id != current_user.branch_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this branch's data.")
     
     update_data = customer.model_dump(exclude_unset=True)
