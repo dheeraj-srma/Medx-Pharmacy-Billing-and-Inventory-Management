@@ -56,7 +56,7 @@ def get_purchase(
     if not purchase:
         raise HTTPException(status_code=404, detail="Purchase not found")
         
-    if current_user.role != RoleEnum.SUPERADMIN and purchase.branch_id != current_user.branch_id:
+    if current_user.role not in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN) and purchase.branch_id != current_user.branch_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this branch's data.")
         
     return purchase

@@ -238,7 +238,7 @@ def get_batch_details(
         
     b_obj, p_name, g_name, p_sku, hsn, gst, s_name = batch
 
-    if current_user.role != RoleEnum.SUPERADMIN and b_obj.branch_id != current_user.branch_id:
+    if current_user.role not in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN) and b_obj.branch_id != current_user.branch_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this branch's data.")
 
     return {

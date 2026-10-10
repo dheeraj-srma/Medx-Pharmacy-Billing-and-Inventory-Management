@@ -103,7 +103,7 @@ def get_customer(
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
         
-    if current_user.role != RoleEnum.SUPERADMIN and customer.branch_id != current_user.branch_id:
+    if current_user.role not in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN) and customer.branch_id != current_user.branch_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this branch's data.")
         
     return customer

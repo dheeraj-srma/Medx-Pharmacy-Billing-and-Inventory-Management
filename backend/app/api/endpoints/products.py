@@ -195,6 +195,7 @@ def create_product(
     manufacturing_date: Optional[date] = Form(None),
     batch_number: Optional[str] = Form(None),
     expiry_date: Optional[date] = Form(None),
+    branch_id: Optional[int] = Form(None),
     image: Optional[UploadFile] = File(None),
     current_user: User = Depends(get_current_active_admin),
 ) -> Any:
@@ -324,7 +325,7 @@ def create_product(
         )
 
         # --- Inventory batch (always initialize so item is accessible in inventory & search) ---
-        target_branch_id = current_user.branch_id or 1
+        target_branch_id = branch_id if branch_id is not None else (current_user.branch_id or 1)
         from datetime import date as dt_date
         is_placeholder_exp = ("expiry_date" in placeholders) or (resolved_expiry_date == dt_date(9999, 12, 31))
         is_placeholder_b = ("batch_number" in placeholders)

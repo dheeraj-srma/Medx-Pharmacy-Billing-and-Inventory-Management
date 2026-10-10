@@ -50,7 +50,7 @@ def get_return(
     if not ret:
         raise HTTPException(status_code=404, detail="Return record not found")
 
-    if current_user.role != RoleEnum.SUPERADMIN and ret.branch_id != current_user.branch_id:
+    if current_user.role not in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN) and ret.branch_id != current_user.branch_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this branch's data.")
 
     return ret

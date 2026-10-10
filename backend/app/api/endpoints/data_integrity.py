@@ -59,7 +59,7 @@ def list_issues(
     - Branch users see only their branch.
     - Filterable by entity_type, severity, resolved status.
     """
-    branch_id = None if current_user.role == RoleEnum.SUPERADMIN else current_user.branch_id
+    branch_id = None if current_user.role in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN) else current_user.branch_id
 
     issues, total = data_integrity_service.get_issues_list(
         db=db,
@@ -88,7 +88,7 @@ def get_issue(
         raise HTTPException(status_code=404, detail="Issue not found")
 
     # Branch isolation
-    if current_user.role != RoleEnum.SUPERADMIN:
+    if current_user.role not in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN):
         if issue.branch_id and issue.branch_id != current_user.branch_id:
             raise HTTPException(status_code=403, detail="Access denied")
 
@@ -106,7 +106,7 @@ def resolve_issue(
     if not issue:
         raise HTTPException(status_code=404, detail="Issue not found")
 
-    if current_user.role != RoleEnum.SUPERADMIN:
+    if current_user.role not in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN):
         if issue.branch_id and issue.branch_id != current_user.branch_id:
             raise HTTPException(status_code=403, detail="Access denied")
 
@@ -124,5 +124,6 @@ def get_summary(
     current_user=Depends(deps.get_current_active_user),
 ) -> Any:
     """Return summary counts for the data integrity dashboard."""
-    branch_id = None if current_user.role == RoleEnum.SUPERADMIN else current_user.branch_id
+    branch_id = None if current_user.role in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN) else current_user.branch_id
     return data_integrity_service.get_summary(db, branch_id)
+
