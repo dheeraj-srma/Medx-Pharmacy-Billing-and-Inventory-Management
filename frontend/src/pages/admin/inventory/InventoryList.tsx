@@ -2,7 +2,6 @@ import { useModal } from "@/providers/ModalProvider";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import api from "../../../services/api";
-import { useAuthStore } from "../../../store/authStore";
 import { useDataStore } from "../../../store/dataStore";
 import { searchAndRank, HighlightedText } from "@/lib/searchEngine";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -36,7 +35,6 @@ import { formatDateDDMMYYYY } from "@/lib/utils";
 
 export default function InventoryList() {
   const { showAlert } = useModal();
-  const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState("batches");
 
   // Filters and Search
@@ -127,13 +125,6 @@ export default function InventoryList() {
 
   // Open adjustment modal with initialized stock quantities
   const openAdjustModal = (batch: any) => {
-    if (user?.role === "superadmin" || user?.role === "admin") {
-      showAlert(
-        "Operational Rights On Hold",
-        "Admin accounts are currently acting as super users with stock adjustment rights on hold. Please use a designated Branch Staff account to adjust inventory stock."
-      );
-      return;
-    }
     setSelectedBatch(batch);
     const curr = Number(batch.quantity_available || 0);
     setNewQuantity(curr.toString());

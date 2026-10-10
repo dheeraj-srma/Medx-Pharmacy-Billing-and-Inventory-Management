@@ -6,13 +6,14 @@ import * as z from "zod";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../../../services/api";
 import { useAuthStore } from "../../../store/authStore";
+import { useDataStore } from "../../../store/dataStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
-import { ArrowLeft, Save, Plus, Trash2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, Warehouse } from "lucide-react";
 
 const purchaseItemSchema = z.object({
   product_id: z.coerce.number().min(1, "Product is required"),
@@ -101,6 +102,15 @@ export default function AddPurchase() {
 
   const grandTotal = calculateTotals();
 
+  const { user } = useAuthStore();
+  const { selectedBranchId, branches } = useDataStore();
+
+  const effectiveBranchId = (user?.role === "admin" || user?.role === "superadmin")
+    ? (selectedBranchId || user?.branch_id || 1)
+    : (user?.branch_id || 1);
+
+  const activeBranchName = branches.find((b: any) => b.id === effectiveBranchId)?.name || `Branch ${effectiveBranchId}`;
+
   const onSubmit = async (data: PurchaseFormValues) => {
     try {
       setIsSubmitting(true);
@@ -108,6 +118,7 @@ export default function AddPurchase() {
       const { branch, ...restOfData } = data as any;
       const payload = {
         ...restOfData,
+        branch_id: effectiveBranchId,
         total_amount: grandTotal,
         grand_total: grandTotal,
       };
@@ -122,32 +133,22 @@ export default function AddPurchase() {
     }
   };
 
-  const { user } = useAuthStore();
-
-  if (user?.role === "superadmin") {
-    return (
-      <div className="max-w-2xl mx-auto mt-10">
-        <Card className="text-center p-8 bg-slate-900 border-slate-800 shadow-2xl shadow-black/50 text-white">
-          <AlertCircle className="mx-auto text-amber-500 mb-4 animate-bounce" size={64} />
-          <h2 className="text-2xl font-bold text-white mb-2">Operational Rights On Hold</h2>
-          <p className="text-slate-400 mb-6">
-            Superadmin accounts have read-only access and are not allowed to register inward stock purchases. Please log in with a branch account to record stock purchases.
-          </p>
-          <Button asChild className="bg-slate-800 hover:bg-slate-700 text-white">
-            <Link to="/admin/purchases">Back to Purchases</Link>
-          </Button>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
-      <div className="flex items-center gap-4">
-        <Link to="/admin/purchases" className="text-slate-400 hover:text-white transition-colors">
-          <ArrowLeft size={24} />
-        </Link>
-        <h1 className="text-2xl font-bold tracking-tight text-white">Inward Stock (Purchase Entry)</h1>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link to="/admin/purchases" className="text-slate-400 hover:text-white transition-colors">
+            <ArrowLeft size={24} />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-white">Inward Stock (Purchase Entry)</h1>
+            <p className="text-xs text-slate-400 mt-0.5">Record new inventory inward batches for the selected branch</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 text-indigo-300 px-3 py-1.5 rounded-lg text-xs font-medium">
+          <Warehouse size={14} className="text-indigo-400" />
+          <span>Inwarding into: <strong className="text-white">{activeBranchName}</strong></span>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
