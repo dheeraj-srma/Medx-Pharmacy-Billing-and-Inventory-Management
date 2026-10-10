@@ -86,6 +86,11 @@ interface DataStoreState {
   selectedBranchId: number | undefined;
   setSelectedBranchId: (id: number | undefined) => void;
 
+  backdateBillingActive: boolean;
+  backdateBillingDate: string;
+  setBackdateBillingActive: (active: boolean) => void;
+  setBackdateBillingDate: (date: string) => void;
+
   /** Invalidate a slice so the next fetch forces a full reload */
   invalidate: (sliceKey: keyof Pick<DataStoreState, 'products' | 'customers' | 'suppliers' | 'sales' | 'purchases' | 'dashboard' | 'batches' | 'transactions'>) => void;
   /** Invalidate ALL slices */
@@ -123,12 +128,17 @@ export const useDataStore = create<DataStoreState>((set, get) => {
     const isBackground = slice.loaded; // has data → background sync, not blocking load
 
     const authUser = useAuthStore.getState().user;
-    const isSuperAdmin = authUser?.role === 'superadmin';
+    const isSuperAdmin = authUser?.role === 'superadmin' || authUser?.role === 'admin';
     const selectedBranchId = get().selectedBranchId;
     
+    // Explicit concrete branch ID to strictly isolate stocks and operations between branches
+    const effectiveBranchId = isSuperAdmin 
+      ? (selectedBranchId || authUser?.branch_id || 1) 
+      : (authUser?.branch_id || 1);
+
     let finalParams = params || {};
-    if (isSuperAdmin && selectedBranchId !== undefined) {
-      finalParams = { ...finalParams, branch_id: selectedBranchId };
+    if (finalParams.branch_id === undefined) {
+      finalParams = { ...finalParams, branch_id: effectiveBranchId };
     }
 
     set((s) => ({
@@ -174,12 +184,17 @@ export const useDataStore = create<DataStoreState>((set, get) => {
     batches: makeSlice<any[]>([]),
     transactions: makeSlice<any[]>([]),
 
-    selectedBranchId: undefined,
+    selectedBranchId: 1,
     setSelectedBranchId: (id) => {
-      set({ selectedBranchId: id });
+      set({ selectedBranchId: id || 1 });
       const store = get();
       store.invalidateAll();
     },
+
+    backdateBillingActive: false,
+    backdateBillingDate: new Date().toISOString().split("T")[0],
+    setBackdateBillingActive: (active) => set({ backdateBillingActive: active }),
+    setBackdateBillingDate: (date) => set({ backdateBillingDate: date }),
     reports: {
       salesReport: null,
       purchaseReport: null,
@@ -224,7 +239,7 @@ export const useDataStore = create<DataStoreState>((set, get) => {
       }));
 
       const authUser = useAuthStore.getState().user;
-      const isSuperAdmin = authUser?.role === 'superadmin';
+      const isSuperAdmin = authUser?.role === 'superadmin' || authUser?.role === 'admin';
       const selectedBranchId = get().selectedBranchId;
       const params: any = { start_date: startDate, end_date: endDate };
       if (isSuperAdmin && selectedBranchId !== undefined) {
@@ -265,7 +280,7 @@ export const useDataStore = create<DataStoreState>((set, get) => {
       }));
 
       const authUser = useAuthStore.getState().user;
-      const isSuperAdmin = authUser?.role === 'superadmin';
+      const isSuperAdmin = authUser?.role === 'superadmin' || authUser?.role === 'admin';
       const selectedBranchId = get().selectedBranchId;
       const params: any = { start_date: startDate, end_date: endDate };
       if (isSuperAdmin && selectedBranchId !== undefined) {
@@ -304,7 +319,7 @@ export const useDataStore = create<DataStoreState>((set, get) => {
       }));
 
       const authUser = useAuthStore.getState().user;
-      const isSuperAdmin = authUser?.role === 'superadmin';
+      const isSuperAdmin = authUser?.role === 'superadmin' || authUser?.role === 'admin';
       const selectedBranchId = get().selectedBranchId;
       const params: any = {};
       if (isSuperAdmin && selectedBranchId !== undefined) {
@@ -338,7 +353,7 @@ export const useDataStore = create<DataStoreState>((set, get) => {
       }));
 
       const authUser = useAuthStore.getState().user;
-      const isSuperAdmin = authUser?.role === 'superadmin';
+      const isSuperAdmin = authUser?.role === 'superadmin' || authUser?.role === 'admin';
       const selectedBranchId = get().selectedBranchId;
       const bParam = (isSuperAdmin && selectedBranchId !== undefined) ? `?branch_id=${selectedBranchId}` : '';
       const bParamAmp = (isSuperAdmin && selectedBranchId !== undefined) ? `&branch_id=${selectedBranchId}` : '';

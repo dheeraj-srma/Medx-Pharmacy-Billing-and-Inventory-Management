@@ -6,29 +6,55 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Formats a date into strictly DD/MM/YYYY (with optional 12-hour time).
+ * Formats a date into strictly DD/MM/YYYY (with optional 12-hour time in IST).
  */
 export function formatDateDDMMYYYY(
   dateInput: string | number | Date | null | undefined, 
   includeTime = false
 ): string {
   if (!dateInput) return "-";
-  const d = new Date(dateInput);
+  
+  let d: Date;
+  if (typeof dateInput === "string") {
+    let s = dateInput.trim();
+    // If it's an ISO datetime string without timezone offset or Z, treat it as UTC
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(s) && !s.endsWith("Z") && !/[+-]\d{2}(:\d{2})?$/.test(s)) {
+      s += "Z";
+    }
+    d = new Date(s);
+  } else {
+    d = new Date(dateInput);
+  }
+
   if (isNaN(d.getTime())) return String(dateInput);
   
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = d.getFullYear();
+  // Format strictly in Indian Standard Time (IST, UTC+5:30)
+  const formatter = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    ...(includeTime ? {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    } : {}),
+  });
+
+  const parts = formatter.formatToParts(d);
+  const getPart = (type: string) => parts.find(p => p.type === type)?.value || "";
+  
+  const day = getPart("day");
+  const month = getPart("month");
+  const year = getPart("year");
 
   if (includeTime) {
-    let hours = d.getHours();
-    const minutes = String(d.getMinutes()).padStart(2, "0");
-    const seconds = String(d.getSeconds()).padStart(2, "0");
-    const ampm = hours >= 12 ? "PM" : "AM";
-    hours = hours % 12;
-    hours = hours ? hours : 12;
-    const strHours = String(hours).padStart(2, "0");
-    return `${day}/${month}/${year}, ${strHours}:${minutes}:${seconds} ${ampm}`;
+    const hour = getPart("hour");
+    const minute = getPart("minute");
+    const second = getPart("second");
+    const dayPeriod = getPart("dayPeriod").toUpperCase();
+    return `${day}/${month}/${year}, ${hour}:${minute}:${second} ${dayPeriod}`;
   }
 
   return `${day}/${month}/${year}`;
