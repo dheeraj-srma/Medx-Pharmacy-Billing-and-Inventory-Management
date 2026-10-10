@@ -22,30 +22,26 @@ def get_dashboard_stats(
     first_day_of_month = today.replace(day=1)
     thirty_days_from_now = today + timedelta(days=30)
     authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
+    effective_branch = authorized_branch if authorized_branch is not None else (current_user.branch_id if current_user.branch_id else 1)
     
-    # Base queries
-    revenue_today_query = db.query(func.sum(Sale.grand_total)).filter(func.date(Sale.sale_date) == today)
-    revenue_month_query = db.query(func.sum(Sale.grand_total)).filter(func.date(Sale.sale_date) >= first_day_of_month)
-    invoices_today_query = db.query(func.count(Sale.id)).filter(func.date(Sale.sale_date) == today)
+    # Base queries strictly isolated by branch
+    revenue_today_query = db.query(func.sum(Sale.grand_total)).filter(func.date(Sale.sale_date) == today, Sale.branch_id == effective_branch)
+    revenue_month_query = db.query(func.sum(Sale.grand_total)).filter(func.date(Sale.sale_date) >= first_day_of_month, Sale.branch_id == effective_branch)
+    invoices_today_query = db.query(func.count(Sale.id)).filter(func.date(Sale.sale_date) == today, Sale.branch_id == effective_branch)
     
     low_stock_query = db.query(func.count(InventoryBatch.id)).filter(
         InventoryBatch.quantity_available > 0,
-        InventoryBatch.quantity_available <= 10
+        InventoryBatch.quantity_available <= 10,
+        InventoryBatch.branch_id == effective_branch
     )
     
     expiring_soon_query = db.query(func.count(InventoryBatch.id)).filter(
         InventoryBatch.quantity_available > 0,
         InventoryBatch.expiry_date >= today,
         InventoryBatch.expiry_date <= thirty_days_from_now,
-        InventoryBatch.is_placeholder_expiry == False
+        InventoryBatch.is_placeholder_expiry == False,
+        InventoryBatch.branch_id == effective_branch
     )
-    
-    if authorized_branch is not None:
-        revenue_today_query = revenue_today_query.filter(Sale.branch_id == authorized_branch)
-        revenue_month_query = revenue_month_query.filter(Sale.branch_id == authorized_branch)
-        invoices_today_query = invoices_today_query.filter(Sale.branch_id == authorized_branch)
-        low_stock_query = low_stock_query.filter(InventoryBatch.branch_id == authorized_branch)
-        expiring_soon_query = expiring_soon_query.filter(InventoryBatch.branch_id == authorized_branch)
         
     today_sales = float(revenue_today_query.scalar() or 0.0)
     month_sales = float(revenue_month_query.scalar() or 0.0)
@@ -69,10 +65,8 @@ def get_recent_sales(
     current_user = Depends(deps.get_current_active_user)
 ):
     authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
-    query = db.query(Sale)
-    if authorized_branch is not None:
-        query = query.filter(Sale.branch_id == authorized_branch)
-        
+    effective_branch = authorized_branch if authorized_branch is not None else (current_user.branch_id if current_user.branch_id else 1)
+    query = db.query(Sale).filter(Sale.branch_id == effective_branch)
     sales = query.order_by(Sale.created_at.desc()).limit(limit).all()
     return sales
 
@@ -86,15 +80,14 @@ def get_sales_chart_data(
     end_date = date.today()
     start_date = end_date - timedelta(days=days-1)
     authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
+    effective_branch = authorized_branch if authorized_branch is not None else (current_user.branch_id if current_user.branch_id else 1)
     
     chart_data = []
     
     query = db.query(Sale.sale_date, Sale.grand_total).filter(
-        func.date(Sale.sale_date) >= start_date
+        func.date(Sale.sale_date) >= start_date,
+        Sale.branch_id == effective_branch
     )
-    
-    if authorized_branch is not None:
-        query = query.filter(Sale.branch_id == authorized_branch)
         
     sales = query.all()
     

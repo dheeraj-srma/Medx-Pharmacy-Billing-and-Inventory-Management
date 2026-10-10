@@ -1,6 +1,7 @@
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from datetime import date
 import uuid
 import os
@@ -44,8 +45,14 @@ def _build_data_integrity_response(db: Session, entity_id: int) -> Optional[dict
     }
 
 
-def _product_response(db: Session, product: Product) -> dict:
-    """Convert a product ORM object to a dict with data_integrity embedded."""
+def _product_response(db: Session, product: Product, total_stock: Optional[float] = None) -> dict:
+    """Convert a product ORM object to a dict with data_integrity and total_stock embedded."""
+    if total_stock is None:
+        stock_val = db.query(
+            func.coalesce(func.sum(InventoryBatch.quantity_available), 0)
+        ).filter(InventoryBatch.product_id == product.id).scalar()
+        total_stock = float(stock_val or 0.0)
+
     data = {
         "id": product.id,
         "name": product.name,
@@ -55,6 +62,7 @@ def _product_response(db: Session, product: Product) -> dict:
         "manufacturer": product.manufacturer,
         "pack_size": product.pack_size,
         "image_url": product.image_url,
+        "cost_price": float(product.cost_price or 0.0),
         "mrp": product.mrp,
         "selling_price": product.selling_price,
         "reorder_level": product.reorder_level,
@@ -67,6 +75,7 @@ def _product_response(db: Session, product: Product) -> dict:
         "is_archived": product.is_archived,
         "category_id": product.category_id,
         "category": product.category,
+        "total_stock": float(total_stock),
         "data_integrity": _build_data_integrity_response(db, product.id),
     }
     return data
@@ -105,31 +114,56 @@ def create_category(
 @router.get("/", response_model=List[ProductResponse])
 def get_products(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 500,
     category_id: int = None,
     search: str = None,
+    branch_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ) -> Any:
-    query = db.query(Product)
+    query = db.query(Product).filter(Product.is_archived == False)
     if category_id:
         query = query.filter(Product.category_id == category_id)
     if search:
-        query = query.filter(Product.name.ilike(f"%{search}%"))
-    products = query.offset(skip).limit(limit).all()
-    # Attach data_integrity to each product
+        query = query.filter(
+            (Product.name.ilike(f"%{search}%")) |
+            (Product.generic_name.ilike(f"%{search}%")) |
+            (Product.sku.ilike(f"%{search}%"))
+        )
+    products = query.order_by(Product.name.asc()).offset(skip).limit(limit).all()
+
+    # Bulk query total stock per product strictly isolated by branch
+    effective_branch = branch_id if branch_id is not None else 1
+    stock_query = db.query(
+        InventoryBatch.product_id,
+        func.coalesce(func.sum(InventoryBatch.quantity_available), 0).label("stock")
+    ).filter(InventoryBatch.branch_id == effective_branch)
+    stock_map = dict(stock_query.group_by(InventoryBatch.product_id).all())
+
+    # Attach data_integrity and total_stock to each product
     result = []
     for p in products:
-        d = _product_response(db, p)
+        d = _product_response(db, p, total_stock=float(stock_map.get(p.id, 0.0)))
         result.append(d)
     return result
 
 
 @router.get("/{id}", response_model=ProductResponse)
-def get_product(id: int, db: Session = Depends(get_db)) -> Any:
+def get_product(
+    id: int, 
+    branch_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+) -> Any:
     product = db.query(Product).filter(Product.id == id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    return _product_response(db, product)
+    effective_branch = branch_id if branch_id is not None else 1
+    stock_val = db.query(
+        func.coalesce(func.sum(InventoryBatch.quantity_available), 0)
+    ).filter(
+        InventoryBatch.product_id == product.id,
+        InventoryBatch.branch_id == effective_branch
+    ).scalar()
+    return _product_response(db, product, total_stock=float(stock_val or 0.0))
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +180,7 @@ def create_product(
     description: Optional[str] = Form(None),
     manufacturer: Optional[str] = Form(None),
     pack_size: Optional[str] = Form(None),
+    cost_price: Optional[float] = Form(None),
     mrp: float = Form(...),
     selling_price: float = Form(...),
     reorder_level: int = Form(10),
@@ -197,33 +232,38 @@ def create_product(
     manufacturer = normalized.get("manufacturer", manufacturer)
 
     # ------------------------------------------------------------------
-    # 2. Inventory batch validation (only if initial_stock > 0)
+    # 2. Inventory batch validation (handles stock >= 0 or default 0)
     # ------------------------------------------------------------------
-    batch_validation = None
+    stock_qty = initial_stock if initial_stock is not None else 0
     resolved_batch_number = batch_number
     resolved_expiry_date = expiry_date
 
-    if initial_stock and initial_stock > 0:
-        batch_validation = validate_inventory_batch(
-            quantity=initial_stock,
-            expiry_date=expiry_date,
-            batch_number=batch_number,
-            manufacturing_date=manufacturing_date,
+    batch_validation = validate_inventory_batch(
+        quantity=stock_qty,
+        expiry_date=expiry_date,
+        batch_number=batch_number,
+        manufacturing_date=manufacturing_date,
+    )
+
+    if not batch_validation.is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=batch_validation.to_api_error(),
         )
 
-        if not batch_validation.is_valid:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=batch_validation.to_api_error(),
-            )
+    # Apply fallback placeholders for missing fields
+    placeholders = batch_validation.get_placeholders()
+    if "batch_number" in placeholders:
+        resolved_batch_number = placeholders["batch_number"]
+    elif not resolved_batch_number:
+        resolved_batch_number = fallback_service.batch_number_placeholder()
 
-        # Apply fallback placeholders for missing fields
-        placeholders = batch_validation.get_placeholders()
-        if "batch_number" in placeholders:
-            resolved_batch_number = placeholders["batch_number"]
-        if "expiry_date" in placeholders:
-            from datetime import date as dt_date
-            resolved_expiry_date = dt_date(9999, 12, 31)
+    if "expiry_date" in placeholders:
+        from datetime import date as dt_date
+        resolved_expiry_date = dt_date(9999, 12, 31)
+    elif not resolved_expiry_date:
+        from datetime import date as dt_date
+        resolved_expiry_date = dt_date(9999, 12, 31)
 
     # ------------------------------------------------------------------
     # 3. Image upload
@@ -245,6 +285,7 @@ def create_product(
     # ------------------------------------------------------------------
     # 4. Persist everything in one transaction
     # ------------------------------------------------------------------
+    resolved_cost = float(cost_price) if (cost_price is not None and float(cost_price) > 0) else round(float(selling_price) * 0.70, 2)
     try:
         db_product = Product(
             name=name,
@@ -253,6 +294,7 @@ def create_product(
             description=description,
             manufacturer=manufacturer,
             pack_size=pack_size,
+            cost_price=resolved_cost,
             mrp=mrp,
             selling_price=selling_price,
             reorder_level=reorder_level,
@@ -281,48 +323,54 @@ def create_product(
             branch_id=current_user.branch_id,
         )
 
-        # --- Inventory batch ---
-        if initial_stock and initial_stock > 0:
-            batch = InventoryBatch(
-                product_id=db_product.id,
-                batch_number=resolved_batch_number,
-                manufacturing_date=manufacturing_date,
-                expiry_date=resolved_expiry_date,
-                quantity_available=initial_stock,
-                purchase_price=0.0,
-                mrp=mrp,
-                selling_price=selling_price,
-                branch_id=current_user.branch_id,
-            )
-            db.add(batch)
-            db.flush()
+        # --- Inventory batch (always initialize so item is accessible in inventory & search) ---
+        target_branch_id = current_user.branch_id or 1
+        from datetime import date as dt_date
+        is_placeholder_exp = ("expiry_date" in placeholders) or (resolved_expiry_date == dt_date(9999, 12, 31))
+        is_placeholder_b = ("batch_number" in placeholders)
 
-            transaction = InventoryTransaction(
-                product_id=db_product.id,
-                batch_id=batch.id,
-                quantity_change=initial_stock,
-                transaction_type=TransactionTypeEnum.INITIAL_STOCK,
-                reference_type="InitialStock",
-                reference_id=str(db_product.id),
-                notes="Initial stock added during product creation",
-                user_id=current_user.id,
-                branch_id=current_user.branch_id,
-            )
-            db.add(transaction)
+        batch = InventoryBatch(
+            product_id=db_product.id,
+            batch_number=resolved_batch_number,
+            manufacturing_date=manufacturing_date,
+            expiry_date=resolved_expiry_date,
+            quantity_available=stock_qty,
+            purchase_price=resolved_cost,
+            mrp=mrp,
+            selling_price=selling_price,
+            branch_id=target_branch_id,
+            is_placeholder_expiry=is_placeholder_exp,
+            is_placeholder_batch=is_placeholder_b,
+        )
+        db.add(batch)
+        db.flush()
 
-            # --- Data integrity issues for the batch ---
-            if batch_validation:
-                batch_issue_fields = [
-                    i for i in batch_validation.issues
-                    if i.severity in (Severity.MISSING, Severity.WARNING)
-                ]
-                data_integrity_service.create_issues_from_validation(
-                    db=db,
-                    entity_type="inventory_batch",
-                    entity_id=batch.id,
-                    field_issues=batch_issue_fields,
-                    branch_id=current_user.branch_id,
-                )
+        transaction = InventoryTransaction(
+            product_id=db_product.id,
+            batch_id=batch.id,
+            quantity_change=stock_qty,
+            transaction_type=TransactionTypeEnum.INITIAL_STOCK,
+            reference_type="InitialStock",
+            reference_id=str(db_product.id),
+            notes="Initial stock added during product creation" if stock_qty > 0 else "Product created with zero opening stock",
+            user_id=current_user.id,
+            branch_id=target_branch_id,
+        )
+        db.add(transaction)
+
+        # --- Data integrity issues for the batch ---
+        if batch_validation:
+            batch_issue_fields = [
+                i for i in batch_validation.issues
+                if i.severity in (Severity.MISSING, Severity.WARNING)
+            ]
+            data_integrity_service.create_issues_from_validation(
+                db=db,
+                entity_type="inventory_batch",
+                entity_id=batch.id,
+                field_issues=batch_issue_fields,
+                branch_id=target_branch_id,
+            )
 
         db.commit()
         db.refresh(db_product)

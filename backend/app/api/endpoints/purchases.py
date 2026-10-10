@@ -16,12 +16,11 @@ def get_purchases(
     current_user = Depends(deps.get_current_active_user)
 ):
     authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
+    effective_branch = authorized_branch if authorized_branch is not None else (current_user.branch_id if current_user.branch_id else 1)
     query = db.query(Purchase).options(
         selectinload(Purchase.supplier),
         selectinload(Purchase.items).selectinload(PurchaseItem.product),
-    )
-    if authorized_branch is not None:
-        query = query.filter(Purchase.branch_id == authorized_branch)
+    ).filter(Purchase.branch_id == effective_branch)
         
     purchases = query.order_by(Purchase.created_at.desc()).all()
     return purchases
@@ -40,7 +39,7 @@ def create_purchase(
     if current_user.role == RoleEnum.SUPERADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Superadmin accounts have read-only access and cannot create purchases."
+            detail="Superadmin accounts have read-only access. Purchases must be recorded using branch staff or admin accounts."
         )
     return PurchaseService.create_purchase(db, purchase, current_user)
 

@@ -34,6 +34,47 @@ class ActiveBatchResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+def ensure_default_batches(db: Session, branch_id: int):
+    """
+    Ensure all active, non-archived products have at least one batch for Branch 1.
+    Branch 2 and other branches remain clean zero until staff explicitly inwards stock.
+    """
+    if branch_id != 1:
+        return
+
+    existing_product_ids = [
+        row[0] for row in db.query(InventoryBatch.product_id).filter(
+            InventoryBatch.branch_id == branch_id
+        ).distinct().all()
+    ]
+    
+    query = db.query(Product).filter(
+        Product.is_active == True,
+        Product.is_archived == False
+    )
+    if existing_product_ids:
+        query = query.filter(~Product.id.in_(existing_product_ids))
+    missing_products = query.all()
+    
+    if missing_products:
+        far_future = date(9999, 12, 31)
+        for prod in missing_products:
+            def_cost = prod.cost_price if (prod.cost_price and float(prod.cost_price) > 0) else Decimal(str(round(float(prod.selling_price or prod.mrp or 0.0) * 0.70, 2)))
+            batch = InventoryBatch(
+                product_id=prod.id,
+                batch_number=f"BATCH-INIT-{prod.id}",
+                expiry_date=far_future,
+                quantity_available=Decimal("0.0000"),
+                purchase_price=def_cost,
+                mrp=Decimal(str(prod.mrp or 0.0)),
+                selling_price=Decimal(str(prod.selling_price or 0.0)),
+                branch_id=branch_id,
+                is_placeholder_expiry=True,
+                is_placeholder_batch=True
+            )
+            db.add(batch)
+        db.commit()
+
 @router.get("/active-batches", response_model=List[ActiveBatchResponse])
 def get_active_batches(
     branch_id: Optional[int] = None,
@@ -42,6 +83,10 @@ def get_active_batches(
 ):
     today = date.today()
     authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
+    effective_branch = authorized_branch if authorized_branch is not None else (current_user.branch_id if current_user.branch_id else 1)
+    if effective_branch == 1:
+        ensure_default_batches(db, 1)
+
     query = db.query(
         InventoryBatch.id,
         InventoryBatch.product_id,
@@ -61,12 +106,9 @@ def get_active_batches(
     ).join(Product, Product.id == InventoryBatch.product_id)\
      .filter(Product.is_active == True)\
      .filter(Product.is_archived == False)\
-     .filter(InventoryBatch.quantity_available > 0)\
+     .filter(InventoryBatch.quantity_available >= 0)\
      .filter(InventoryBatch.expiry_date >= today)\
-     .filter(InventoryBatch.is_placeholder_expiry == False)
-
-    if authorized_branch is not None:
-        query = query.filter(InventoryBatch.branch_id == authorized_branch)
+     .filter(InventoryBatch.branch_id == effective_branch)
 
     results = query.order_by(Product.name.asc(), InventoryBatch.expiry_date.asc()).all()
     
@@ -99,21 +141,31 @@ def get_all_batches(
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
+    authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
+    effective_branch = authorized_branch if authorized_branch is not None else (current_user.branch_id if current_user.branch_id else 1)
+    if effective_branch == 1:
+        ensure_default_batches(db, 1)
+
     query = db.query(
         InventoryBatch,
         Product.name.label("product_name"),
         Product.sku.label("product_sku")
-    ).join(Product, Product.id == InventoryBatch.product_id)
-    
-    authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
-    if authorized_branch is not None:
-        query = query.filter(InventoryBatch.branch_id == authorized_branch)
+    ).join(Product, Product.id == InventoryBatch.product_id)\
+     .filter(Product.is_archived == False)\
+     .filter(InventoryBatch.branch_id == effective_branch)
         
     if search:
-        query = query.filter(
-            (Product.name.ilike(f"%{search}%")) |
-            (InventoryBatch.batch_number.ilike(f"%{search}%"))
-        )
+        tokens = search.strip().split()
+        for token in tokens:
+            search_term = f"%{token}%"
+            query = query.filter(
+                (Product.name.ilike(search_term)) |
+                (Product.generic_name.ilike(search_term)) |
+                (Product.brand.ilike(search_term)) |
+                (Product.sku.ilike(search_term)) |
+                (Product.barcode.ilike(search_term)) |
+                (InventoryBatch.batch_number.ilike(search_term))
+            )
         
     today = date.today()
     if filter_status == "expired":
@@ -123,11 +175,20 @@ def get_all_batches(
             InventoryBatch.expiry_date >= today,
             InventoryBatch.expiry_date <= today + timedelta(days=30)
         )
+    elif filter_status == "healthy":
+        query = query.filter(InventoryBatch.quantity_available > 10)
+    elif filter_status == "critical":
+        query = query.filter(
+            InventoryBatch.quantity_available > 0,
+            InventoryBatch.quantity_available <= 5
+        )
     elif filter_status == "low_stock":
         query = query.filter(
             InventoryBatch.quantity_available > 0,
             InventoryBatch.quantity_available <= 10
         )
+    elif filter_status == "out_of_stock":
+        query = query.filter(InventoryBatch.quantity_available <= 0)
         
     results = query.order_by(InventoryBatch.expiry_date.asc()).all()
     
@@ -153,6 +214,56 @@ def get_all_batches(
         batches.append(batch_dict)
     return batches
 
+@router.get("/batches/{batch_id}")
+def get_batch_details(
+    batch_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user = Depends(deps.get_current_active_user)
+):
+    from app.models.supplier import Supplier
+    batch = db.query(
+        InventoryBatch,
+        Product.name.label("product_name"),
+        Product.generic_name.label("generic_name"),
+        Product.sku.label("product_sku"),
+        Product.hsn_code.label("hsn_code"),
+        Product.gst_percentage.label("gst_percentage"),
+        Supplier.name.label("supplier_name")
+    ).join(Product, Product.id == InventoryBatch.product_id)\
+     .outerjoin(Supplier, Supplier.id == InventoryBatch.supplier_id)\
+     .filter(InventoryBatch.id == batch_id).first()
+     
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+        
+    b_obj, p_name, g_name, p_sku, hsn, gst, s_name = batch
+
+    if current_user.role != RoleEnum.SUPERADMIN and b_obj.branch_id != current_user.branch_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this branch's data.")
+
+    return {
+        "id": b_obj.id,
+        "product_id": b_obj.product_id,
+        "product_name": p_name,
+        "generic_name": g_name,
+        "sku": p_sku,
+        "hsn_code": hsn,
+        "gst_percentage": float(gst or 0),
+        "batch_number": b_obj.batch_number,
+        "manufacturing_date": b_obj.manufacturing_date.isoformat() if b_obj.manufacturing_date else None,
+        "expiry_date": b_obj.expiry_date.isoformat(),
+        "quantity_available": float(b_obj.quantity_available),
+        "purchase_price": float(b_obj.purchase_price),
+        "cost_price": float(b_obj.purchase_price),
+        "mrp": float(b_obj.mrp),
+        "selling_price": float(b_obj.selling_price),
+        "supplier_id": b_obj.supplier_id,
+        "supplier_name": s_name,
+        "branch_id": b_obj.branch_id,
+        "created_at": b_obj.created_at.isoformat() if b_obj.created_at else None,
+        "updated_at": b_obj.updated_at.isoformat() if b_obj.updated_at else None,
+    }
+
 @router.get("/transactions", response_model=List[InventoryTransactionListResponse])
 def get_transactions(
     branch_id: Optional[int] = None,
@@ -161,6 +272,7 @@ def get_transactions(
 ):
     from app.models.user import User as UserModel
     authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
+    effective_branch = authorized_branch if authorized_branch is not None else (current_user.branch_id if current_user.branch_id else 1)
     query = db.query(
         InventoryTransaction,
         Product.name.label("product_name"),
@@ -168,10 +280,8 @@ def get_transactions(
         UserModel.full_name.label("user_name")
     ).join(Product, Product.id == InventoryTransaction.product_id)\
      .join(InventoryBatch, InventoryBatch.id == InventoryTransaction.batch_id)\
-     .join(UserModel, UserModel.id == InventoryTransaction.user_id)
-     
-    if authorized_branch is not None:
-        query = query.filter(InventoryTransaction.branch_id == authorized_branch)
+     .join(UserModel, UserModel.id == InventoryTransaction.user_id)\
+     .filter(InventoryTransaction.branch_id == effective_branch)
         
     results = query.order_by(InventoryTransaction.timestamp.desc()).all()
      
@@ -202,10 +312,10 @@ def adjust_stock(
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
-    if current_user.role == RoleEnum.SUPERADMIN:
+    if current_user.role in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Superadmin has read-only access and cannot adjust stock."
+            detail="Superuser / Admin operational transaction rights are currently on hold. Stock adjustments must be performed using branch staff accounts."
         )
         
     batch = db.query(InventoryBatch).filter(

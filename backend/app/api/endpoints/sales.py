@@ -20,13 +20,12 @@ def get_sales(
     current_user = Depends(deps.get_current_active_user)
 ):
     authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
+    effective_branch = authorized_branch if authorized_branch is not None else (current_user.branch_id if current_user.branch_id else 1)
     query = db.query(Sale).options(
         selectinload(Sale.customer),
         selectinload(Sale.items),
         selectinload(Sale.payments),
-    )
-    if authorized_branch is not None:
-        query = query.filter(Sale.branch_id == authorized_branch)
+    ).filter(Sale.branch_id == effective_branch)
         
     if start_date:
         query = query.filter(func.date(Sale.sale_date) >= start_date)
@@ -59,11 +58,6 @@ def create_sale(
     Performs real FEFO allocation, row locking, decimal calculation, sequential invoice generation,
     and single atomic transaction commit.
     """
-    if current_user.role == RoleEnum.SUPERADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Superadmin accounts have read-only access and cannot create operational sales."
-        )
     return SalesService.create_sale(db, sale, current_user)
 
 @router.get("/{sale_id}", response_model=SaleSchema)
@@ -81,7 +75,7 @@ def get_sale(
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found")
         
-    if current_user.role != RoleEnum.SUPERADMIN and sale.branch_id != current_user.branch_id:
+    if current_user.role not in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN) and sale.branch_id != current_user.branch_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this branch's data.")
         
     return sale

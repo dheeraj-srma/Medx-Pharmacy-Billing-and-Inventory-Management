@@ -11,7 +11,7 @@ from app.models.purchase import Purchase, PurchaseItem
 from app.models.inventory import InventoryBatch, InventoryTransaction, TransactionTypeEnum
 from app.models.product import Product
 from app.models.supplier import Supplier
-from app.models.user import User
+from app.models.user import User, RoleEnum
 from app.schemas.purchase import PurchaseCreate
 from app.services.fallback_service import is_placeholder, is_expiry_placeholder
 
@@ -25,11 +25,15 @@ class PurchaseService:
         purchase_in: PurchaseCreate,
         current_user: User
     ) -> Purchase:
-        branch_id = current_user.branch_id
+        if current_user.role in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN):
+            branch_id = purchase_in.branch_id or current_user.branch_id or 1
+        else:
+            branch_id = current_user.branch_id
+
         if not branch_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User must be assigned to an active pharmacy branch to record inward stock."
+                detail="A valid pharmacy branch must be specified to record inward stock."
             )
 
         if not purchase_in.items:

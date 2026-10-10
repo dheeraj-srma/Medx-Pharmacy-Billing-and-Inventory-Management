@@ -12,7 +12,7 @@ from app.models.sale import Sale, SaleItem
 from app.models.inventory import InventoryBatch, InventoryTransaction, TransactionTypeEnum
 from app.models.product import Product
 from app.models.payment import Payment, PaymentMethodEnum, PaymentStatusEnum
-from app.models.user import User
+from app.models.user import User, RoleEnum
 from app.schemas.sale import SaleCreate, SalePreviewResponse, SaleItemResponse
 from app.services.invoice_service import generate_sequential_invoice_number
 
@@ -31,12 +31,48 @@ class SalesService:
         Authoritative Sale Creation with FEFO and Concurrency Protection.
         Executes within a single atomic database transaction with row locking.
         """
-        branch_id = current_user.branch_id
+        if current_user.role in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN):
+            branch_id = sale_in.branch_id or current_user.branch_id or 1
+        else:
+            branch_id = current_user.branch_id
+
         if not branch_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User must be assigned to an active pharmacy branch to process sales."
+                detail="A valid pharmacy branch must be specified to process sales."
             )
+
+        from app.models.branch import Branch
+        branch = db.query(Branch).filter(Branch.id == branch_id).first()
+        if not branch:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Branch ID {branch_id} does not exist."
+            )
+
+        # Check Backdate Billing Permissions and Effective Sale Date
+        from app.models.settings import StoreSettings
+        store_settings = db.query(StoreSettings).filter(StoreSettings.branch_id == branch_id).first()
+        allow_backdated = bool(store_settings.allow_backdated_billing) if store_settings else False
+
+        effective_sale_date = datetime.now(IST)
+        if sale_in.sale_date is not None:
+            if not allow_backdated:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Backdated billing is currently disabled in store settings for this branch."
+                )
+            req_dt = sale_in.sale_date
+            if req_dt.tzinfo is None:
+                effective_sale_date = req_dt.replace(tzinfo=IST)
+            else:
+                effective_sale_date = req_dt.astimezone(IST)
+
+            if effective_sale_date.date() > datetime.now(IST).date():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Backdated billing cannot specify a future date."
+                )
 
         if not sale_in.items:
             raise HTTPException(
@@ -173,9 +209,9 @@ class SalesService:
             grand_total = rounded_grand_total
 
             # 3. Generate Sequential Invoice Number (Locked with row lock in sequence table)
-            invoice_number = generate_sequential_invoice_number(db, branch_id=branch_id)
+            invoice_number = generate_sequential_invoice_number(db, branch_id=branch_id, dt=effective_sale_date)
 
-            # 4. Persist Sale Header
+            # 5. Persist Sale Header
             sale = Sale(
                 invoice_number=invoice_number,
                 customer_id=sale_in.customer_id,
@@ -188,7 +224,7 @@ class SalesService:
                 status="COMPLETED",
                 branch_id=branch_id,
                 created_by=current_user.id,
-                sale_date=datetime.now(IST)
+                sale_date=effective_sale_date
             )
             db.add(sale)
             db.flush()
@@ -216,7 +252,7 @@ class SalesService:
                     notes=f"Sale Invoice: {invoice_number}",
                     user_id=current_user.id,
                     branch_id=branch_id,
-                    timestamp=datetime.now(IST)
+                    timestamp=effective_sale_date
                 )
                 db.add(txn)
 
@@ -244,7 +280,8 @@ class SalesService:
                         method=p_req.method,
                         amount=p_amt,
                         status=PaymentStatusEnum.COMPLETED,
-                        reference_number=p_req.reference_number
+                        reference_number=p_req.reference_number,
+                        created_at=effective_sale_date
                     )
                     db.add(payment)
             else:
@@ -260,7 +297,8 @@ class SalesService:
                     branch_id=branch_id,
                     method=p_method,
                     amount=grand_total,
-                    status=PaymentStatusEnum.COMPLETED
+                    status=PaymentStatusEnum.COMPLETED,
+                    created_at=effective_sale_date
                 )
                 db.add(payment)
 
@@ -304,7 +342,10 @@ class SalesService:
         Calculates prices, taxes, discounts, and FEFO allocation for UI preview
         without altering inventory or persisting records.
         """
-        branch_id = current_user.branch_id or 1
+        if current_user.role in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN):
+            branch_id = sale_in.branch_id or current_user.branch_id or 1
+        else:
+            branch_id = current_user.branch_id or 1
         today = date.today()
         subtotal = Decimal("0.00")
         total_tax = Decimal("0.00")

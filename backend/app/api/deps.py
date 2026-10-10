@@ -91,7 +91,7 @@ def get_authorized_branch_id(
     - Staff / Admin: STRICTLY bound to current_user.branch_id. If a client attempts
       to supply a different branch_id, access is rejected with 403 Forbidden.
     """
-    if current_user.role == RoleEnum.SUPERADMIN:
+    if current_user.role in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN):
         return branch_id
     
     # Regular users cannot cross-query branches

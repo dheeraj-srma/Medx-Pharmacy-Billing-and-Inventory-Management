@@ -30,8 +30,8 @@ def get_sales_report(
         )
         
         authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
-        if authorized_branch is not None:
-            sales_query = sales_query.filter(Sale.branch_id == authorized_branch)
+        effective_branch = authorized_branch if authorized_branch is not None else (current_user.branch_id if current_user.branch_id else 1)
+        sales_query = sales_query.filter(Sale.branch_id == effective_branch)
             
         sales_list = sales_query.all()
         
@@ -103,8 +103,8 @@ def get_purchases_report(
         )
         
         authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
-        if authorized_branch is not None:
-            purchases_query = purchases_query.filter(Purchase.branch_id == authorized_branch)
+        effective_branch = authorized_branch if authorized_branch is not None else (current_user.branch_id if current_user.branch_id else 1)
+        purchases_query = purchases_query.filter(Purchase.branch_id == effective_branch)
             
         purchases_list = purchases_query.all()
         
@@ -144,21 +144,23 @@ def get_purchases_report(
 @router.get("/inventory-valuation")
 def get_inventory_valuation(
     branch_id: Optional[int] = None,
+    low_stock_threshold: Optional[float] = 10.0,
+    expiry_days: Optional[int] = 30,
     db: Session = Depends(deps.get_db),
     current_user = Depends(deps.get_current_active_user)
 ):
     try:
-        # Fetch all batches that have quantity > 0
+        # Fetch all batches that have quantity >= 0
         query = db.query(
             InventoryBatch,
             Product.name.label("product_name"),
             Product.sku.label("product_sku")
         ).join(Product, Product.id == InventoryBatch.product_id)\
-         .filter(InventoryBatch.quantity_available > 0)
+         .filter(InventoryBatch.quantity_available >= 0)
          
         authorized_branch = deps.get_authorized_branch_id(branch_id, current_user)
-        if authorized_branch is not None:
-            query = query.filter(InventoryBatch.branch_id == authorized_branch)
+        effective_branch = authorized_branch if authorized_branch is not None else (current_user.branch_id if current_user.branch_id else 1)
+        query = query.filter(InventoryBatch.branch_id == effective_branch)
             
         batches = query.all()
          
@@ -172,10 +174,13 @@ def get_inventory_valuation(
         
         # Low Stock Batches
         low_stock = []
-        # Expiring batches (within 30 days)
+        # Expiring batches
         expiring_soon = []
+        all_batch_items = []
         today = date.today()
-        thirty_days_later = today + timedelta(days=30)
+        threshold_val = 10.0 if low_stock_threshold is None else float(low_stock_threshold)
+        days_val = 30 if expiry_days is None else int(expiry_days)
+        target_expiry_date = today + timedelta(days=days_val)
         
         for batch_obj, prod_name, prod_sku in batches:
             batch_data = {
@@ -189,13 +194,17 @@ def get_inventory_valuation(
                 "mrp": batch_obj.mrp,
                 "selling_price": batch_obj.selling_price
             }
+            all_batch_items.append(batch_data)
             
-            if batch_obj.quantity_available <= 10:
+            if batch_obj.quantity_available <= threshold_val:
                 low_stock.append(batch_data)
                 
-            if batch_obj.expiry_date >= today and batch_obj.expiry_date <= thirty_days_later:
+            if batch_obj.expiry_date >= today and batch_obj.expiry_date <= target_expiry_date:
                 expiring_soon.append(batch_data)
                 
+        potential_profit = max(0.0, total_valuation_selling - total_valuation_purchase)
+        profit_margin_pct = round((potential_profit / total_valuation_selling * 100), 1) if total_valuation_selling > 0 else 0.0
+
         return {
             "total_products": total_products,
             "total_batches": total_batches,
@@ -203,8 +212,11 @@ def get_inventory_valuation(
             "valuation_purchase": total_valuation_purchase,
             "valuation_mrp": total_valuation_mrp,
             "valuation_selling": total_valuation_selling,
+            "potential_profit": potential_profit,
+            "profit_margin_pct": profit_margin_pct,
             "low_stock_items": low_stock,
-            "expiring_soon_items": expiring_soon
+            "expiring_soon_items": expiring_soon,
+            "all_batches": all_batch_items
         }
     except Exception as e:
         logger.exception("Failed to generate inventory valuation")
