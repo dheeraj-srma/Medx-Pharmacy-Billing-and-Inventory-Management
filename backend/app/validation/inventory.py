@@ -73,7 +73,7 @@ def validate_inventory_batch(
                 field_name="quantity",
                 severity=Severity.WARNING,
                 issue_type=IssueType.BUSINESS_RULE_WARNING,
-                message="Quantity is zero — this batch will not appear in available stock.",
+                message="Initial quantity is zero — item is currently out of stock.",
                 original_value=quantity,
             ))
 

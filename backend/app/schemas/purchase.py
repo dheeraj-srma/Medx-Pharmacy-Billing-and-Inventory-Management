@@ -1,11 +1,17 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 from decimal import Decimal
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from app.schemas.supplier import Supplier
 from app.schemas.product import ProductResponse
 
-DECIMAL_CONFIG = ConfigDict(from_attributes=True, json_encoders={Decimal: float})
+DECIMAL_CONFIG = ConfigDict(
+    from_attributes=True, 
+    json_encoders={
+        Decimal: float,
+        datetime: lambda dt: (dt.replace(tzinfo=timezone.utc).isoformat() if dt.tzinfo is None else dt.isoformat()),
+    }
+)
 
 class PurchaseItemBase(BaseModel):
     product_id: int
@@ -36,6 +42,7 @@ class PurchaseBase(BaseModel):
     discount_amount: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0)
     grand_total: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0)
     notes: Optional[str] = None
+    branch_id: Optional[int] = None
     model_config = DECIMAL_CONFIG
 
 class PurchaseCreate(PurchaseBase):

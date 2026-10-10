@@ -1,11 +1,17 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timezone
 from app.schemas.customer import Customer
 from app.models.payment import PaymentMethodEnum, PaymentStatusEnum
 
-DECIMAL_CONFIG = ConfigDict(from_attributes=True, json_encoders={Decimal: float})
+DECIMAL_CONFIG = ConfigDict(
+    from_attributes=True,
+    json_encoders={
+        Decimal: float,
+        datetime: lambda dt: (dt.replace(tzinfo=timezone.utc).isoformat() if dt.tzinfo is None else dt.isoformat()),
+    }
+)
 
 class PaymentCreate(BaseModel):
     method: PaymentMethodEnum = PaymentMethodEnum.CASH
@@ -59,6 +65,7 @@ class SaleCreate(BaseModel):
     round_off: Optional[Decimal] = None
     grand_total: Optional[Decimal] = None
     branch_id: Optional[int] = None # Ignored for ordinary staff; server-derived
+    sale_date: Optional[datetime] = None # Custom date for backdated billing when enabled
     model_config = DECIMAL_CONFIG
 
 class SalePreviewResponse(BaseModel):

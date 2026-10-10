@@ -25,6 +25,7 @@ class ProductBase(BaseModel):
     manufacturer: Optional[str] = None
     pack_size: Optional[str] = None
     image_url: Optional[str] = None
+    cost_price: Optional[float] = 0.0
     mrp: float
     selling_price: float
     reorder_level: int = 10
@@ -47,6 +48,7 @@ class ProductCreate(ProductBase):
 
 class ProductResponse(ProductBase):
     id: int
+    total_stock: float = 0.0
     category: Optional[CategoryResponse] = None
     data_integrity: Optional[dict] = None  # EntityDataIntegrity when issues exist
 
@@ -61,6 +63,7 @@ class ProductUpdate(BaseModel):
     manufacturer: Optional[str] = None
     pack_size: Optional[str] = None
     image_url: Optional[str] = None
+    cost_price: Optional[float] = None
     mrp: Optional[float] = None
     selling_price: Optional[float] = None
     reorder_level: Optional[int] = None

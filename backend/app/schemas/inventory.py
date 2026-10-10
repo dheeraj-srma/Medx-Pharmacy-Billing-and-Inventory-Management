@@ -1,8 +1,16 @@
 from decimal import Decimal
 from pydantic import BaseModel, ConfigDict
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 from app.models.inventory import TransactionTypeEnum
+
+DECIMAL_CONFIG = ConfigDict(
+    from_attributes=True,
+    json_encoders={
+        Decimal: float,
+        datetime: lambda dt: (dt.replace(tzinfo=timezone.utc).isoformat() if dt.tzinfo is None else dt.isoformat()),
+    }
+)
 
 class InventoryBatchBase(BaseModel):
     product_id: int
@@ -23,7 +31,7 @@ class InventoryBatchResponse(InventoryBatchBase):
     id: int
     created_at: datetime
     updated_at: datetime
-    model_config = ConfigDict(from_attributes=True)
+    model_config = DECIMAL_CONFIG
 
 class InventoryTransactionBase(BaseModel):
     product_id: int
@@ -36,13 +44,13 @@ class InventoryTransactionBase(BaseModel):
     branch_id: Optional[int] = None
 
 class InventoryTransactionCreate(InventoryTransactionBase):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = DECIMAL_CONFIG
 
 class InventoryTransactionResponse(InventoryTransactionBase):
     id: int
     user_id: int
     timestamp: datetime
-    model_config = ConfigDict(from_attributes=True)
+    model_config = DECIMAL_CONFIG
 
 class StockAdjustmentRequest(BaseModel):
     batch_id: int

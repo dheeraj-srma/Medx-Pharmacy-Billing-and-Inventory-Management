@@ -53,3 +53,11 @@ class SaleItem(Base):
     sale = relationship("Sale", back_populates="items")
     product = relationship("Product")
     batch = relationship("InventoryBatch")
+
+    @property
+    def product_name(self) -> str:
+        return self.product.name if self.product else ""
+
+    @property
+    def batch_number(self) -> str:
+        return self.batch.batch_number if self.batch else ""

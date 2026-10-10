@@ -26,6 +26,7 @@ class Product(Base):
     pack_size = Column(String, nullable=True) # e.g. "15 Tablets"
     units_per_pack = Column(Integer, default=1, nullable=False) # Smallest sellable units per package
     image_url = Column(String, nullable=True)
+    cost_price = Column(Numeric(12, 2), default=Decimal("0.00"), nullable=True)
     mrp = Column(Numeric(12, 2), nullable=False)
     selling_price = Column(Numeric(12, 2), nullable=False)
     reorder_level = Column(Integer, default=10)
