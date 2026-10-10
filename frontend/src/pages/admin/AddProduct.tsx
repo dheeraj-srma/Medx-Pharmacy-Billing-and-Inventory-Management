@@ -6,6 +6,7 @@ import * as z from "zod";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import api from "../../services/api";
 import { useDataStore } from "../../store/dataStore";
+import { useAuthStore } from "../../store/authStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,7 +48,11 @@ export default function AddProduct() {
   const { id } = useParams<{ id?: string }>();
   const isEditMode = Boolean(id);
   const navigate = useNavigate();
-  const { invalidate } = useDataStore();
+  const { invalidate, selectedBranchId } = useDataStore();
+  const { user } = useAuthStore();
+  const effectiveBranchId = (user?.role === "admin" || user?.role === "superadmin")
+    ? (selectedBranchId || user?.branch_id || 1)
+    : (user?.branch_id || 1);
 
   const [categories, setCategories] = useState<any[]>([]);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -183,6 +188,7 @@ export default function AddProduct() {
             formData.append(key, value.toString());
           }
         });
+        formData.append("branch_id", effectiveBranchId.toString());
 
         if (imageFile) {
           formData.append("image", imageFile);
