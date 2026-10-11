@@ -53,6 +53,10 @@ def _product_response(db: Session, product: Product, total_stock: Optional[float
         ).filter(InventoryBatch.product_id == product.id).scalar()
         total_stock = float(stock_val or 0.0)
 
+    latest_batch = db.query(InventoryBatch).filter(
+        InventoryBatch.product_id == product.id
+    ).order_by(InventoryBatch.created_at.desc(), InventoryBatch.id.desc()).first()
+
     data = {
         "id": product.id,
         "name": product.name,
@@ -76,6 +80,7 @@ def _product_response(db: Session, product: Product, total_stock: Optional[float
         "category_id": product.category_id,
         "category": product.category,
         "total_stock": float(total_stock),
+        "batch_number": latest_batch.batch_number if latest_batch else None,
         "data_integrity": _build_data_integrity_response(db, product.id),
     }
     return data
@@ -286,7 +291,7 @@ def create_product(
     # ------------------------------------------------------------------
     # 4. Persist everything in one transaction
     # ------------------------------------------------------------------
-    resolved_cost = float(cost_price) if (cost_price is not None and float(cost_price) > 0) else round(float(selling_price) * 0.70, 2)
+    resolved_cost = float(cost_price) if (cost_price is not None and float(cost_price) >= 0) else 0.0
     try:
         db_product = Product(
             name=name,
@@ -434,6 +439,23 @@ def update_product(
     for field, value in update_data.items():
         setattr(product, field, value)
 
+    if product_in.batch_number is not None:
+        batch_no = product_in.batch_number.strip()
+        latest_batch = db.query(InventoryBatch).filter(
+            InventoryBatch.product_id == id
+        ).order_by(InventoryBatch.created_at.desc(), InventoryBatch.id.desc()).first()
+        if latest_batch:
+            latest_batch.batch_number = batch_no
+            latest_batch.is_placeholder_batch = False
+            db.add(latest_batch)
+            data_integrity_service.auto_resolve_field(
+                db=db,
+                entity_type="inventory_batch",
+                entity_id=latest_batch.id,
+                field_name="batch_number",
+                resolved_by_user_id=current_user.id,
+            )
+
     # Auto-resolve any issues for updated fields
     for field_name in update_data.keys():
         data_integrity_service.auto_resolve_field(
@@ -511,6 +533,11 @@ def delete_product(
 
     product.is_active = False
     product.is_archived = True
+
+    # Zero out available stock for this product so it does not linger in inventory calculations
+    db.query(InventoryBatch).filter(InventoryBatch.product_id == id).update(
+        {"quantity_available": Decimal("0.0000")}
+    )
 
     db.add(product)
     db.commit()

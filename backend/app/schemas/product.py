@@ -49,6 +49,7 @@ class ProductCreate(ProductBase):
 class ProductResponse(ProductBase):
     id: int
     total_stock: float = 0.0
+    batch_number: Optional[str] = None
     category: Optional[CategoryResponse] = None
     data_integrity: Optional[dict] = None  # EntityDataIntegrity when issues exist
 
@@ -75,6 +76,7 @@ class ProductUpdate(BaseModel):
     is_active: Optional[bool] = None
     is_archived: Optional[bool] = None
     category_id: Optional[int] = None
+    batch_number: Optional[str] = None
 
     class Config:
         from_attributes = True

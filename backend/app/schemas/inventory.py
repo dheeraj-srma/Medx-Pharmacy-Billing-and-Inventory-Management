@@ -57,6 +57,7 @@ class StockAdjustmentRequest(BaseModel):
     quantity_change: Decimal
     transaction_type: TransactionTypeEnum = TransactionTypeEnum.ADJUSTMENT
     notes: Optional[str] = None
+    batch_number: Optional[str] = None
 
 class InventoryBatchListResponse(InventoryBatchResponse):
     product_name: str

@@ -31,6 +31,8 @@ class ActiveBatchResponse(BaseModel):
     mrp: float
     selling_price: float
     branch_id: Optional[int] = None
+    gst_percentage: Optional[float] = 0.0
+    hsn_code: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -59,7 +61,7 @@ def ensure_default_batches(db: Session, branch_id: int):
     if missing_products:
         far_future = date(9999, 12, 31)
         for prod in missing_products:
-            def_cost = prod.cost_price if (prod.cost_price and float(prod.cost_price) > 0) else Decimal(str(round(float(prod.selling_price or prod.mrp or 0.0) * 0.70, 2)))
+            def_cost = prod.cost_price if (prod.cost_price is not None and float(prod.cost_price) >= 0) else Decimal("0.00")
             batch = InventoryBatch(
                 product_id=prod.id,
                 batch_number=f"BATCH-INIT-{prod.id}",
@@ -97,12 +99,15 @@ def get_active_batches(
         Product.sku.label("sku"),
         Product.pack_size.label("pack_size"),
         Product.image_url.label("image_url"),
+        Product.gst_percentage.label("gst_percentage"),
+        Product.hsn_code.label("hsn_code"),
         InventoryBatch.batch_number,
         InventoryBatch.expiry_date,
         InventoryBatch.quantity_available,
         InventoryBatch.mrp,
         InventoryBatch.selling_price,
-        InventoryBatch.branch_id
+        InventoryBatch.branch_id,
+        Product.mrp.label("product_mrp")
     ).join(Product, Product.id == InventoryBatch.product_id)\
      .filter(Product.is_active == True)\
      .filter(Product.is_archived == False)\
@@ -114,6 +119,7 @@ def get_active_batches(
     
     batches = []
     for row in results:
+        effective_mrp = row.mrp if (row.mrp is not None and row.mrp > 0) else (row.product_mrp or row.selling_price or 0)
         batches.append({
             "id": row.id,
             "product_id": row.product_id,
@@ -127,9 +133,11 @@ def get_active_batches(
             "batch_number": row.batch_number,
             "expiry_date": row.expiry_date,
             "quantity_available": row.quantity_available,
-            "mrp": row.mrp,
+            "mrp": effective_mrp,
             "selling_price": row.selling_price,
-            "branch_id": row.branch_id
+            "branch_id": row.branch_id,
+            "gst_percentage": float(row.gst_percentage or 0.0),
+            "hsn_code": row.hsn_code,
         })
     return batches
 
@@ -330,7 +338,23 @@ def adjust_stock(
         raise HTTPException(status_code=400, detail="Cannot adjust below available quantity")
         
     batch.quantity_available += adjust_in.quantity_change
-    
+
+    if adjust_in.batch_number and adjust_in.batch_number.strip():
+        new_batch_no = adjust_in.batch_number.strip()
+        batch.batch_number = new_batch_no
+        batch.is_placeholder_batch = False
+        try:
+            from app.services import data_integrity_service
+            data_integrity_service.auto_resolve_field(
+                db=db,
+                entity_type="inventory_batch",
+                entity_id=batch.id,
+                field_name="batch_number",
+                resolved_by_user_id=current_user.id,
+            )
+        except Exception:
+            pass
+
     txn = InventoryTransaction(
         product_id=batch.product_id,
         batch_id=batch.id,
@@ -338,7 +362,7 @@ def adjust_stock(
         transaction_type=adjust_in.transaction_type,
         reference_type="Adjustment",
         reference_id=str(current_user.id),
-        notes=adjust_in.notes or "Manual adjustment",
+        notes=adjust_in.notes or (f"Manual adjustment (Batch: {batch.batch_number})" if batch.batch_number else "Manual adjustment"),
         user_id=current_user.id,
         branch_id=batch.branch_id,
         timestamp=datetime.now(IST)
@@ -355,9 +379,44 @@ def adjust_stock(
         branch_id=batch.branch_id,
         entity_type="inventory_batch",
         entity_id=batch.id,
-        new_value={"quantity_change": str(adjust_in.quantity_change), "type": adjust_in.transaction_type.value, "notes": adjust_in.notes}
+        new_value={
+            "quantity_change": str(adjust_in.quantity_change),
+            "type": adjust_in.transaction_type.value,
+            "notes": adjust_in.notes,
+            "batch_number": batch.batch_number
+        }
     )
 
     db.commit()
     db.refresh(batch)
     return batch
+
+@router.delete("/batches/{batch_id}")
+def delete_inventory_batch(
+    batch_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_admin),
+):
+    batch = db.query(InventoryBatch).filter(InventoryBatch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    if current_user.role not in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN):
+        if batch.branch_id != current_user.branch_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied. Batch does not belong to your branch."
+            )
+
+    from app.models.sale import SaleItem
+    has_sales = db.query(SaleItem).filter(SaleItem.batch_id == batch_id).first()
+    if has_sales:
+        batch.quantity_available = Decimal("0.0000")
+        db.add(batch)
+        db.commit()
+        return {"message": "Batch has historical sales records. Available quantity set to 0.", "batch_id": batch_id}
+
+    db.query(InventoryTransaction).filter(InventoryTransaction.batch_id == batch_id).delete()
+    db.delete(batch)
+    db.commit()
+    return {"message": "Batch removed from inventory successfully", "batch_id": batch_id}
