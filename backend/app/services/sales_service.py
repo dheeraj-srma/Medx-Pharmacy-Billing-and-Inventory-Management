@@ -15,6 +15,7 @@ from app.models.payment import Payment, PaymentMethodEnum, PaymentStatusEnum
 from app.models.user import User, RoleEnum
 from app.schemas.sale import SaleCreate, SalePreviewResponse, SaleItemResponse
 from app.services.invoice_service import generate_sequential_invoice_number
+from app.services.pricing_service import PricingService
 
 def round_money(val: Decimal) -> Decimal:
     """Helper to ensure currency values are strictly rounded to 2 decimal places."""
@@ -30,6 +31,7 @@ class SalesService:
         """
         Authoritative Sale Creation with FEFO and Concurrency Protection.
         Executes within a single atomic database transaction with row locking.
+        Uses PricingService for GST-inclusive price extraction and calculations.
         """
         if current_user.role in (RoleEnum.SUPERADMIN, RoleEnum.ADMIN):
             branch_id = sale_in.branch_id or current_user.branch_id or 1
@@ -82,8 +84,6 @@ class SalesService:
 
         today = date.today()
         allocated_items = []
-        subtotal = Decimal("0.00")
-        total_tax = Decimal("0.00")
 
         try:
             # 1. FEFO & Inventory Row Locking
@@ -98,7 +98,6 @@ class SalesService:
 
                 requested_qty = Decimal(str(req_item.quantity))
                 gst_percentage = Decimal(str(product.gst_percentage or "0.00"))
-                gst_rate = gst_percentage / Decimal("100.0")
 
                 if req_item.batch_id:
                     # Specific batch requested — lock and validate
@@ -125,21 +124,17 @@ class SalesService:
 
                     batch.quantity_available = batch_avail - requested_qty
                     unit_price = round_money(Decimal(str(batch.selling_price)))
+                    batch_mrp = round_money(Decimal(str(batch.mrp if batch.mrp and batch.mrp > 0 else (product.mrp or unit_price))))
                     item_discount = round_money(Decimal(str(req_item.discount or "0.00")))
-                    gross_line = round_money(unit_price * requested_qty)
-                    net_line = max(Decimal("0.00"), gross_line - item_discount)
-                    line_tax = round_money(net_line * gst_rate)
-
-                    subtotal += net_line
-                    total_tax += line_tax
 
                     allocated_items.append({
                         "product_id": product.id,
                         "batch_id": batch.id,
                         "quantity": requested_qty,
                         "unit_price": unit_price,
+                        "mrp": batch_mrp,
+                        "gst_percentage": gst_percentage,
                         "discount": item_discount,
-                        "total_price": net_line,
                         "batch": batch,
                         "product": product
                     })
@@ -173,45 +168,56 @@ class SalesService:
                         remaining_needed -= take
 
                         unit_price = round_money(Decimal(str(batch.selling_price)))
+                        batch_mrp = round_money(Decimal(str(batch.mrp if batch.mrp and batch.mrp > 0 else (product.mrp or unit_price))))
                         # Pro-rate discount if any
                         item_discount = round_money(Decimal(str(req_item.discount or "0.00")) * (take / requested_qty))
-                        gross_line = round_money(unit_price * take)
-                        net_line = max(Decimal("0.00"), gross_line - item_discount)
-                        line_tax = round_money(net_line * gst_rate)
-
-                        subtotal += net_line
-                        total_tax += line_tax
 
                         allocated_items.append({
                             "product_id": product.id,
                             "batch_id": batch.id,
                             "quantity": take,
                             "unit_price": unit_price,
+                            "mrp": batch_mrp,
+                            "gst_percentage": gst_percentage,
                             "discount": item_discount,
-                            "total_price": net_line,
                             "batch": batch,
                             "product": product
                         })
 
-            # 2. Authoritative Order Level Discounts and Grand Total
-            if sale_in.discount_percent and sale_in.discount_percent > Decimal("0.00"):
-                discount_percent = Decimal(str(sale_in.discount_percent))
-                order_discount = round_money(subtotal * (discount_percent / Decimal("100.0")))
-            elif sale_in.discount_amount and sale_in.discount_amount > Decimal("0.00"):
-                order_discount = round_money(Decimal(str(sale_in.discount_amount)))
-            else:
-                order_discount = Decimal("0.00")
+            # 2. Authoritative Order Level Discounts and GST Calculation via PricingService
+            cart_raw_items = [
+                {
+                    "product_id": alloc["product_id"],
+                    "batch_id": alloc["batch_id"],
+                    "quantity": alloc["quantity"],
+                    "mrp": alloc["mrp"],
+                    "selling_price": alloc["unit_price"],
+                    "gst_percentage": alloc["gst_percentage"],
+                    "discount": alloc["discount"],
+                    "product_name": alloc["product"].name,
+                    "batch_number": alloc["batch"].batch_number,
+                    "hsn_code": alloc["product"].hsn_code,
+                }
+                for alloc in allocated_items
+            ]
 
-            raw_grand_total = max(Decimal("0.00"), subtotal - order_discount + total_tax)
-            # Auto round off to nearest integer
-            rounded_grand_total = raw_grand_total.quantize(Decimal("1"), rounding=ROUND_HALF_UP).quantize(Decimal("0.01"))
-            round_off = round_money(rounded_grand_total - raw_grand_total)
-            grand_total = rounded_grand_total
+            cart_result = PricingService.calculate_cart(
+                items=cart_raw_items,
+                discount_percent=Decimal(str(sale_in.discount_percent or "0.00")),
+                discount_amount=Decimal(str(sale_in.discount_amount or "0.00")),
+                is_interstate=False
+            )
+
+            subtotal = cart_result["subtotal"]
+            total_tax = cart_result["tax_amount"]
+            order_discount = cart_result["order_discount"]
+            round_off = cart_result["round_off"]
+            grand_total = cart_result["grand_total"]
 
             # 3. Generate Sequential Invoice Number (Locked with row lock in sequence table)
             invoice_number = generate_sequential_invoice_number(db, branch_id=branch_id, dt=effective_sale_date)
 
-            # 5. Persist Sale Header
+            # 4. Persist Sale Header
             sale = Sale(
                 invoice_number=invoice_number,
                 customer_id=sale_in.customer_id,
@@ -230,7 +236,7 @@ class SalesService:
             db.flush()
 
             # 5. Persist Sale Items & Inventory Transactions
-            for alloc in allocated_items:
+            for alloc, calc_item in zip(allocated_items, cart_result["items"]):
                 sale_item = SaleItem(
                     sale_id=sale.id,
                     product_id=alloc["product_id"],
@@ -238,7 +244,7 @@ class SalesService:
                     quantity=alloc["quantity"],
                     unit_price=alloc["unit_price"],
                     discount=alloc["discount"],
-                    total_price=alloc["total_price"]
+                    total_price=calc_item["effective_line_total"]
                 )
                 db.add(sale_item)
 
@@ -347,9 +353,7 @@ class SalesService:
         else:
             branch_id = current_user.branch_id or 1
         today = date.today()
-        subtotal = Decimal("0.00")
-        total_tax = Decimal("0.00")
-        preview_items = []
+        raw_preview_items = []
 
         for req_item in sale_in.items:
             product = db.query(Product).filter(
@@ -361,7 +365,6 @@ class SalesService:
 
             requested_qty = Decimal(str(req_item.quantity))
             gst_percentage = Decimal(str(product.gst_percentage or "0.00"))
-            gst_rate = gst_percentage / Decimal("100.0")
 
             batches = db.query(InventoryBatch).filter(
                 InventoryBatch.product_id == product.id,
@@ -383,45 +386,63 @@ class SalesService:
                 remaining -= take
 
                 unit_price = round_money(Decimal(str(batch.selling_price)))
+                batch_mrp = round_money(Decimal(str(batch.mrp if batch.mrp and batch.mrp > 0 else (product.mrp or unit_price))))
                 item_discount = round_money(Decimal(str(req_item.discount or "0.00")) * (take / requested_qty))
-                gross_line = round_money(unit_price * take)
-                net_line = max(Decimal("0.00"), gross_line - item_discount)
-                line_tax = round_money(net_line * gst_rate)
 
-                subtotal += net_line
-                total_tax += line_tax
+                raw_preview_items.append({
+                    "product_id": product.id,
+                    "batch_id": batch.id,
+                    "quantity": take,
+                    "unit_price": unit_price,
+                    "mrp": batch_mrp,
+                    "gst_percentage": gst_percentage,
+                    "discount": item_discount,
+                    "batch_number": batch.batch_number,
+                    "product_name": product.name,
+                    "hsn_code": product.hsn_code,
+                })
 
-                preview_items.append(SaleItemResponse(
-                    id=0,
-                    sale_id=0,
-                    product_id=product.id,
-                    batch_id=batch.id,
-                    quantity=take,
-                    unit_price=unit_price,
-                    discount=item_discount,
-                    total_price=net_line,
-                    batch_number=batch.batch_number,
-                    product_name=product.name
-                ))
+        cart_result = PricingService.calculate_cart(
+            items=raw_preview_items,
+            discount_percent=Decimal(str(sale_in.discount_percent or "0.00")),
+            discount_amount=Decimal(str(sale_in.discount_amount or "0.00")),
+            is_interstate=False,
+        )
 
-        if sale_in.discount_percent and sale_in.discount_percent > Decimal("0.00"):
-            discount_percent = Decimal(str(sale_in.discount_percent))
-            order_discount = round_money(subtotal * (discount_percent / Decimal("100.0")))
-        elif sale_in.discount_amount and sale_in.discount_amount > Decimal("0.00"):
-            order_discount = round_money(Decimal(str(sale_in.discount_amount)))
-        else:
-            order_discount = Decimal("0.00")
-
-        raw_grand_total = max(Decimal("0.00"), subtotal - order_discount + total_tax)
-        rounded_grand_total = raw_grand_total.quantize(Decimal("1"), rounding=ROUND_HALF_UP).quantize(Decimal("0.01"))
-        round_off = round_money(rounded_grand_total - raw_grand_total)
-        grand_total = rounded_grand_total
+        preview_items = []
+        for line in cart_result["items"]:
+            preview_items.append(SaleItemResponse(
+                id=0,
+                sale_id=0,
+                product_id=line["product_id"],
+                batch_id=line["batch_id"],
+                quantity=line["quantity"],
+                unit_price=line["selling_price"],
+                discount=line["additional_discount"],
+                total_price=line["effective_line_total"],
+                batch_number=line["batch_number"],
+                product_name=line["product_name"],
+                mrp=line["mrp"],
+                hsn_code=line["hsn_code"],
+                gst_percentage=line["gst_percentage"],
+                taxable_amount=line["taxable_amount"],
+                gst_amount=line["gst_amount"],
+                cgst_amount=line["cgst_amount"],
+                sgst_amount=line["sgst_amount"],
+                mrp_discount_amount=line["mrp_line_discount"],
+                mrp_discount_percent=line["mrp_discount_percent"],
+            ))
 
         return SalePreviewResponse(
-            total_amount=subtotal,
-            tax_amount=total_tax,
-            discount_amount=order_discount,
-            round_off=round_off,
-            grand_total=grand_total,
-            items=preview_items
+            total_amount=cart_result["subtotal"],
+            tax_amount=cart_result["tax_amount"],
+            discount_amount=cart_result["order_discount"],
+            round_off=cart_result["round_off"],
+            grand_total=cart_result["grand_total"],
+            items=preview_items,
+            total_mrp=cart_result["total_mrp"],
+            total_mrp_discount=cart_result["total_mrp_discount"],
+            overall_mrp_discount_percent=cart_result["overall_mrp_discount_percent"],
+            taxable_amount=cart_result["taxable_amount"],
+            tax_breakdown=cart_result["tax_breakdown"],
         )

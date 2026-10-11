@@ -50,6 +50,15 @@ class SaleItemResponse(BaseModel):
     total_price: Decimal
     batch_number: Optional[str] = None
     product_name: Optional[str] = None
+    mrp: Optional[Decimal] = None
+    hsn_code: Optional[str] = None
+    gst_percentage: Optional[Decimal] = None
+    taxable_amount: Optional[Decimal] = None
+    gst_amount: Optional[Decimal] = None
+    cgst_amount: Optional[Decimal] = None
+    sgst_amount: Optional[Decimal] = None
+    mrp_discount_amount: Optional[Decimal] = None
+    mrp_discount_percent: Optional[Decimal] = None
     model_config = DECIMAL_CONFIG
 
 class SaleCreate(BaseModel):
@@ -75,6 +84,11 @@ class SalePreviewResponse(BaseModel):
     round_off: Decimal = Decimal("0.00")
     grand_total: Decimal
     items: List[SaleItemResponse]
+    total_mrp: Optional[Decimal] = None
+    total_mrp_discount: Optional[Decimal] = None
+    overall_mrp_discount_percent: Optional[Decimal] = None
+    taxable_amount: Optional[Decimal] = None
+    tax_breakdown: Optional[dict] = None
     model_config = DECIMAL_CONFIG
 
 class Sale(BaseModel):
@@ -95,4 +109,9 @@ class Sale(BaseModel):
     customer: Optional[Customer] = None
     items: List[SaleItemResponse] = []
     payments: List[PaymentResponse] = []
+    total_mrp: Optional[Decimal] = None
+    total_mrp_discount: Optional[Decimal] = None
+    overall_mrp_discount_percent: Optional[Decimal] = None
+    taxable_amount: Optional[Decimal] = None
+    tax_breakdown: Optional[dict] = None
     model_config = DECIMAL_CONFIG
