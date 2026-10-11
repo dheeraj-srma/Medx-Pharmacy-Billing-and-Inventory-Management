@@ -37,10 +37,19 @@ const productSchema = z.object({
   hsn_code: z.string().optional(),
   gst_percentage: z.coerce.number().min(0, "GST must be non-negative").default(0),
   initial_stock: z.coerce.number().optional(),
+  batch_number: z.string().optional(),
   manufacturing_date: z.string().optional(),
   expiry_date: z.string().optional(),
   reorder_level: z.coerce.number().default(10),
   is_active: z.boolean().default(true),
+}).refine((data) => {
+  if (data.mrp > 0 && data.selling_price > data.mrp) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Selling price cannot exceed MRP (GST-inclusive trade rules)",
+  path: ["selling_price"],
 });
 
 export default function AddProduct() {
@@ -61,6 +70,7 @@ export default function AddProduct() {
   const [isLoadingProduct, setIsLoadingProduct] = useState(isEditMode);
   const [diIssues, setDiIssues] = useState<FieldIssue[]>([]); // data integrity warnings from API
   const [savedWithWarnings, setSavedWithWarnings] = useState(false);
+  const [isCustomGst, setIsCustomGst] = useState(false);
 
   const { register, handleSubmit, formState: { errors }, setValue, watch, reset } = useForm<any>({
     resolver: zodResolver(productSchema),
@@ -68,6 +78,7 @@ export default function AddProduct() {
       reorder_level: 10,
       cost_price: 0,
       gst_percentage: 0,
+      batch_number: "",
       is_active: true,
     }
   });
@@ -75,6 +86,16 @@ export default function AddProduct() {
   const initialStock = watch("initial_stock");
   const selectedCategoryId = watch("category_id");
   const isActive = watch("is_active");
+  const currentGst = watch("gst_percentage");
+
+  useEffect(() => {
+    if (currentGst !== undefined && currentGst !== null) {
+      const num = Number(currentGst);
+      if (![0, 5, 12, 18].includes(num)) {
+        setIsCustomGst(true);
+      }
+    }
+  }, [currentGst]);
 
   // Fetch categories on mount
   useEffect(() => {
@@ -103,6 +124,7 @@ export default function AddProduct() {
             barcode: p.barcode || "",
             sku: p.sku || "",
             hsn_code: p.hsn_code || "",
+            batch_number: p.batch_number || "",
             gst_percentage: p.gst_percentage || 0,
             reorder_level: p.reorder_level ?? 10,
             is_active: p.is_active ?? true,
@@ -441,10 +463,12 @@ export default function AddProduct() {
                 {(() => {
                   const mrpVal = Number(watch("mrp") || 0);
                   const spVal = Number(watch("selling_price") || 0);
-                  const costVal = Number(watch("cost_price") || (spVal > 0 ? spVal * 0.70 : 0));
+                  const rawCost = watch("cost_price");
+                  const hasCost = rawCost !== undefined && rawCost !== null && rawCost !== "" && Number(rawCost) > 0;
+                  const costVal = hasCost ? Number(rawCost) : 0;
                   const gstVal = Number(watch("gst_percentage") || 0);
                   const profitVal = spVal - costVal;
-                  const marginPct = spVal > 0 ? ((profitVal / spVal) * 100).toFixed(1) : "0.0";
+                  const marginPct = (hasCost && spVal > 0) ? ((profitVal / spVal) * 100).toFixed(1) : "0.0";
                   const basePrice = gstVal > 0 ? (spVal / (1 + gstVal / 100)) : spVal;
                   const unitTax = spVal - basePrice;
 
@@ -453,9 +477,15 @@ export default function AddProduct() {
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <span className="text-slate-400">Gross Margin:</span>
-                          <span className={`font-mono font-bold ${profitVal >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                            ₹{profitVal.toFixed(2)} ({marginPct}%)
-                          </span>
+                          {hasCost && spVal > 0 ? (
+                            <span className={`font-mono font-bold ${profitVal >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                              ₹{profitVal.toFixed(2)} ({marginPct}%)
+                            </span>
+                          ) : (
+                            <span className="text-slate-500 italic font-mono">
+                              {spVal > 0 ? "— (Set Cost Price)" : "— (Set Cost & Selling Price)"}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 text-slate-400">
                           <span>Base Pre-Tax: <strong className="text-slate-200 font-mono">₹{basePrice.toFixed(2)}</strong></span>
@@ -469,7 +499,7 @@ export default function AddProduct() {
                           <AlertTriangle size={13} /> Selling price cannot exceed MRP by Indian trade laws.
                         </div>
                       )}
-                      {costVal > spVal && spVal > 0 && (
+                      {hasCost && costVal > spVal && spVal > 0 && (
                         <div className="text-amber-400 font-medium flex items-center gap-1.5 text-[11px]">
                           <AlertTriangle size={13} /> Warning: Cost price exceeds selling price (Negative margin).
                         </div>
@@ -481,14 +511,45 @@ export default function AddProduct() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                   <div className="space-y-2">
                     <Label htmlFor="gst_percentage" className="text-slate-300">GST Rate (%)</Label>
-                    <Input 
-                      id="gst_percentage" 
-                      type="number" 
-                      step="0.1" 
-                      {...register("gst_percentage")} 
-                      placeholder="12" 
-                      className="bg-slate-950 border-slate-700 text-white placeholder-slate-500 font-mono"
-                    />
+                    <div className="flex gap-2">
+                      <Select 
+                        value={isCustomGst ? "custom" : String(currentGst ?? 0)}
+                        onValueChange={(val) => {
+                          if (val === "custom") {
+                            setIsCustomGst(true);
+                          } else {
+                            setIsCustomGst(false);
+                            setValue("gst_percentage", Number(val), { shouldValidate: true });
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="bg-slate-950 border-slate-700 text-white flex-1">
+                          <SelectValue placeholder="Select GST rate" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-900 border-slate-700 text-white">
+                          <SelectItem value="0">0% (Nil / Exempt)</SelectItem>
+                          <SelectItem value="5">5% (Essential Meds)</SelectItem>
+                          <SelectItem value="12">12% (Standard Pharma)</SelectItem>
+                          <SelectItem value="18">18% (Medical Supplies)</SelectItem>
+                          <SelectItem value="custom">Custom Rate...</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {isCustomGst && (
+                        <div className="w-28">
+                          <Input 
+                            id="gst_percentage" 
+                            type="number" 
+                            step="0.1" 
+                            min="0"
+                            max="100"
+                            placeholder="Rate %"
+                            {...register("gst_percentage")} 
+                            className="bg-slate-950 border-slate-700 text-white placeholder-slate-500 font-mono"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    {errors.gst_percentage && <p className="text-xs text-rose-400">{errors.gst_percentage.message as string}</p>}
                   </div>
 
                   <div className="space-y-2">
@@ -545,6 +606,15 @@ export default function AddProduct() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
+                    <Label htmlFor="batch_number" className="text-slate-300">Batch Number</Label>
+                    <Input 
+                      id="batch_number" 
+                      {...register("batch_number")} 
+                      placeholder="e.g. BATCH-2026-001" 
+                      className="bg-slate-950 border-slate-700 text-white font-mono placeholder-slate-500"
+                    />
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="initial_stock" className="text-slate-300">Opening Quantity</Label>
                     <Input 
                       id="initial_stock" 
@@ -575,7 +645,7 @@ export default function AddProduct() {
                       className="bg-slate-950 border-slate-700 text-white"
                     />
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="reorder_level" className="text-slate-300">Reorder Alert Level</Label>
                     <Input 
                       id="reorder_level" 
@@ -588,13 +658,25 @@ export default function AddProduct() {
               </Card>
             )}
 
-            {/* Inventory reorder level on Edit */}
+            {/* Inventory reorder level & Batch on Edit */}
             {isEditMode && (
               <Card className="bg-slate-900/50 backdrop-blur-sm border-slate-800 shadow-xl shadow-black/10">
                 <CardHeader>
-                  <CardTitle className="text-white text-lg">Inventory Threshold</CardTitle>
+                  <CardTitle className="text-white text-lg">Inventory & Batch Details</CardTitle>
+                  <CardDescription className="text-slate-400">
+                    Update current batch number and reorder alert thresholds.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="batch_number" className="text-slate-300">Current Batch Number</Label>
+                    <Input 
+                      id="batch_number" 
+                      {...register("batch_number")} 
+                      placeholder="e.g. BATCH-2026-001" 
+                      className="bg-slate-950 border-slate-700 text-white font-mono placeholder-slate-500"
+                    />
+                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="reorder_level" className="text-slate-300">Reorder Alert Level</Label>
                     <Input 
@@ -603,8 +685,8 @@ export default function AddProduct() {
                       {...register("reorder_level")} 
                       className="bg-slate-950 border-slate-700 text-white"
                     />
-                    <p className="text-xs text-slate-500">Alerts will trigger when total stock falls below this quantity.</p>
                   </div>
+                  <p className="text-xs text-slate-500 sm:col-span-2">Alerts will trigger when total stock falls below this quantity.</p>
                 </CardContent>
               </Card>
             )}

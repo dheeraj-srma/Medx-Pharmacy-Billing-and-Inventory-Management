@@ -29,12 +29,13 @@ import {
   Phone,
   Mail,
   Building,
-  CreditCard
+  CreditCard,
+  Trash2
 } from "lucide-react";
 import { formatDateDDMMYYYY } from "@/lib/utils";
 
 export default function InventoryList() {
-  const { showAlert } = useModal();
+  const { showAlert, showConfirm } = useModal();
   const [activeTab, setActiveTab] = useState("batches");
 
   // Filters and Search
@@ -54,6 +55,7 @@ export default function InventoryList() {
 
   // Adjustment Modal State
   const [selectedBatch, setSelectedBatch] = useState<any>(null);
+  const [adjustBatchNumber, setAdjustBatchNumber] = useState("");
   const [newQuantity, setNewQuantity] = useState("");
   const [quantityChange, setQuantityChange] = useState("0");
   const [adjustmentType, setAdjustmentType] = useState("ADJUSTMENT");
@@ -123,9 +125,10 @@ export default function InventoryList() {
     fetchTransactions(true);
   }, [fetchTransactions]);
 
-  // Open adjustment modal with initialized stock quantities
+  // Open adjustment modal with initialized stock quantities & batch number
   const openAdjustModal = (batch: any) => {
     setSelectedBatch(batch);
+    setAdjustBatchNumber(batch.batch_number || "");
     const curr = Number(batch.quantity_available || 0);
     setNewQuantity(curr.toString());
     setQuantityChange("0");
@@ -171,11 +174,12 @@ export default function InventoryList() {
     setQuantityChange((-curr).toString());
   };
 
-  // Compute live projected quantity
+  // Compute live projected quantity & validation
   const currentStock = Number(selectedBatch?.quantity_available || 0);
   const parsedChange = parseFloat(quantityChange) || 0;
   const projectedStock = Number((currentStock + parsedChange).toFixed(4));
-  const isAdjustmentInvalid = isNaN(projectedStock) || projectedStock < 0 || parsedChange === 0;
+  const isBatchNumberChanged = Boolean(selectedBatch && adjustBatchNumber.trim() !== (selectedBatch.batch_number || ""));
+  const isAdjustmentInvalid = isNaN(projectedStock) || projectedStock < 0 || (parsedChange === 0 && !isBatchNumberChanged);
 
   const getStatusBadge = (batch: any) => {
     const today = new Date();
@@ -203,22 +207,27 @@ export default function InventoryList() {
     if (!selectedBatch || isAdjustmentInvalid) return;
     setIsAdjusting(true);
     try {
-      const payload = {
+      const payload: any = {
         batch_id: selectedBatch.id,
         quantity_change: parsedChange,
         transaction_type: adjustmentType,
         notes: notes || null
       };
+      if (adjustBatchNumber.trim()) {
+        payload.batch_number = adjustBatchNumber.trim();
+      }
 
       await api.post("/inventory/adjust", payload);
-      showAlert("Success", "Stock adjusted successfully!");
+      showAlert("Success", "Stock and batch details updated successfully!");
       setSelectedBatch(null);
       setQuantityChange("0");
       setNewQuantity("");
       setNotes("");
+      setAdjustBatchNumber("");
       // Invalidate inventory slices so next fetch is fresh
       invalidate('batches');
       invalidate('transactions');
+      invalidate('products');
       refetchBatches();
       refetchTransactions();
     } catch (error: any) {
@@ -226,6 +235,26 @@ export default function InventoryList() {
       showAlert("Error", error.response?.data?.detail || "Adjustment failed");
     } finally {
       setIsAdjusting(false);
+    }
+  };
+
+  const handleDeleteProduct = async (batch: any) => {
+    if (!await showConfirm(
+      "Delete Product from Inventory",
+      `Are you sure you want to delete "${batch.product_name}" from the inventory? This will remove the product and its stock.`
+    )) {
+      return;
+    }
+
+    try {
+      await api.delete(`/products/${batch.product_id}`);
+      showAlert("Success", `Product "${batch.product_name}" was deleted from inventory.`);
+      invalidate('batches');
+      invalidate('products');
+      refetchBatches();
+    } catch (err: any) {
+      console.error("Failed to delete product from inventory", err);
+      showAlert("Error", err.response?.data?.detail || "Failed to delete product from inventory.");
     }
   };
 
@@ -561,12 +590,23 @@ export default function InventoryList() {
                       </TableCell>
                       <TableCell>{getStatusBadge(batch)}</TableCell>
                       <TableCell className="text-right">
-                        <Button 
-                          onClick={() => openAdjustModal(batch)}
-                          className="bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-500/20 text-xs h-8 px-3 rounded-md transition-all shadow-sm"
-                        >
-                          <Sliders className="mr-1" size={14} /> Adjust Stock
-                        </Button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button 
+                            onClick={() => openAdjustModal(batch)}
+                            className="bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-500/20 text-xs h-8 px-2.5 rounded-md transition-all shadow-sm"
+                            title="Adjust Stock Quantity & Batch Details"
+                          >
+                            <Sliders className="mr-1" size={13} /> Adjust Stock
+                          </Button>
+                          <Button 
+                            onClick={() => handleDeleteProduct(batch)}
+                            variant="ghost"
+                            className="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 text-xs h-8 px-2.5 rounded-md transition-all"
+                            title="Delete product from inventory"
+                          >
+                            <Trash2 className="mr-1" size={13} /> Delete
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -932,6 +972,22 @@ export default function InventoryList() {
                 )}
               </div>
 
+              {/* Batch Number Field */}
+              <div className="space-y-1.5">
+                <Label htmlFor="adjustBatchNumber" className="text-slate-300 text-xs font-semibold flex items-center justify-between">
+                  <span>Batch Number</span>
+                  <span className="text-[11px] text-slate-500 font-normal">Stored with stock & product</span>
+                </Label>
+                <Input 
+                  id="adjustBatchNumber" 
+                  type="text"
+                  placeholder="e.g. BATCH-2026-001"
+                  value={adjustBatchNumber} 
+                  onChange={(e) => setAdjustBatchNumber(e.target.value)}
+                  className="bg-slate-950 border-slate-800 text-white font-mono text-xs focus:border-indigo-500"
+                />
+              </div>
+
               {/* Synchronized Input Boxes: Target New Quantity & Quantity Change */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -1088,7 +1144,7 @@ export default function InventoryList() {
                   disabled={isAdjusting || isAdjustmentInvalid}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-md shadow-indigo-600/20 text-xs h-9 disabled:opacity-40"
                 >
-                  {isAdjusting ? "Applying..." : `Apply (${parsedChange > 0 ? `+${parsedChange}` : parsedChange} units)`}
+                  {isAdjusting ? "Applying..." : parsedChange !== 0 ? `Apply (${parsedChange > 0 ? `+${parsedChange}` : parsedChange} units)` : "Save Batch Details"}
                 </Button>
               </div>
             </CardContent>
