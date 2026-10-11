@@ -32,6 +32,8 @@ interface BatchItem {
   quantity_available: number;
   mrp: number;
   selling_price: number;
+  gst_percentage?: number;
+  hsn_code?: string | null;
 }
 
 // Match result handled via centralized searchEngine
@@ -87,8 +89,7 @@ export default function POS() {
   const [completedSale, setCompletedSale] = useState<any>(null);
   const [matchedCustomerId, setMatchedCustomerId] = useState<number | null>(null);
   const [storeSettings, setStoreSettings] = useState<any>(null);
-  const [discountPercent, setDiscountPercent] = useState<number>(0);
-  const [taxPercent, setTaxPercent] = useState<number>(0);
+  const [manualDiscountPercent, setManualDiscountPercent] = useState<string | null>(null);
   const [customSaleDate, setCustomSaleDate] = useState<string>("");
   
   const [printSnapshot, setPrintSnapshot] = useState<any>(null);
@@ -99,6 +100,7 @@ export default function POS() {
     if (prevBranchRef.current !== activeBranchId) {
       if (cart.length > 0) {
         setCart([]);
+        setManualDiscountPercent(null);
       }
       prevBranchRef.current = activeBranchId;
     }
@@ -113,6 +115,8 @@ export default function POS() {
           quantity_available: Number(b.quantity_available) || 0,
           mrp: Number(b.mrp) || 0,
           selling_price: Number(b.selling_price) || 0,
+          gst_percentage: Number(b.gst_percentage) || 0,
+          hsn_code: b.hsn_code || null,
         }));
         setActiveBatches(normalized);
       })
@@ -124,9 +128,6 @@ export default function POS() {
     api.get("/settings/", { params: { branch_id: activeBranchId } })
       .then(res => {
         setStoreSettings(res.data);
-        if (res.data?.default_tax_rate !== undefined) {
-          setTaxPercent(res.data.default_tax_rate);
-        }
         if (res.data?.allow_backdated_billing) {
           setBackdateBillingActive(true);
           const effectiveDate = backdateBillingDate || new Date().toISOString().split("T")[0];
@@ -240,6 +241,7 @@ export default function POS() {
         batch_number: batch.batch_number,
         expiry_date: batch.expiry_date,
         quantity: 1,
+        mrp: Number(batch.mrp) || Number(batch.selling_price) || 0,
         unit_price: Number(batch.selling_price) || 0,
         discount: 0,
         total_price: Number(batch.selling_price) || 0,
@@ -249,7 +251,9 @@ export default function POS() {
         tablets_per_pack: eligibility.unitsPerPack,
         is_loose: false,
         packs: 1,
-        loose_tablets: 0
+        loose_tablets: 0,
+        gst_percentage: Number(batch.gst_percentage) || 0,
+        hsn_code: batch.hsn_code || null,
       }]);
     }
     setSearch("");
@@ -396,13 +400,81 @@ export default function POS() {
     }));
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + item.total_price, 0);
-  const discountAmount = subtotal * (discountPercent / 100);
-  const taxableAmount = subtotal - discountAmount;
-  const taxAmount = taxableAmount * (taxPercent / 100);
-  const rawGrandTotal = Math.max(0, taxableAmount + taxAmount);
-  const grandTotal = Math.round(rawGrandTotal);
-  const roundOff = grandTotal - rawGrandTotal;
+  // Authoritative GST-inclusive Cart Calculations:
+  const totalMrp = cart.reduce((sum, item) => {
+    const itemMrp = Number(item.mrp) || Number(item.unit_price) || 0;
+    return sum + (itemMrp * item.quantity);
+  }, 0);
+
+  const totalSellingPrice = cart.reduce((sum, item) => sum + item.total_price, 0);
+  const effectiveBase = Math.max(totalMrp, totalSellingPrice);
+  const mrpDiff = Math.max(0, effectiveBase - totalSellingPrice);
+  const autoMrpDiscountPercent = effectiveBase > 0 
+    ? Number(((mrpDiff / effectiveBase) * 100).toFixed(2)) 
+    : 0;
+
+  // If cashier typed a discount %, use that; otherwise auto-set to MRP-to-SP difference discount
+  const effectiveDiscountPercent = manualDiscountPercent !== null
+    ? Math.max(0, Math.min(100, parseFloat(manualDiscountPercent) || 0))
+    : autoMrpDiscountPercent;
+
+  const orderDiscountAmount = manualDiscountPercent !== null
+    ? Number((effectiveBase * (effectiveDiscountPercent / 100)).toFixed(2))
+    : mrpDiff;
+
+  const netPayableRaw = Math.max(0, effectiveBase - orderDiscountAmount);
+  const grandTotal = Math.round(netPayableRaw);
+  const roundOff = Number((grandTotal - netPayableRaw).toFixed(2));
+
+  // Extract GST included in Selling Price / Net Consideration (never added on top):
+  const cartTaxDetails = useMemo(() => {
+    let totalTaxable = 0;
+    let totalGst = 0;
+    let totalCgst = 0;
+    let totalSgst = 0;
+    const rateMap: Record<string, { rate: number; taxable: number; gst: number; cgst: number; sgst: number }> = {};
+
+    cart.forEach(item => {
+      const lineGross = item.total_price;
+      const extraCashierDiscount = Math.max(0, orderDiscountAmount - mrpDiff);
+      const lineDisc = totalSellingPrice > 0 && extraCashierDiscount > 0
+        ? (extraCashierDiscount * (lineGross / totalSellingPrice))
+        : 0;
+      const effectiveLine = Math.max(0, lineGross - lineDisc);
+      const gstRate = Number(item.gst_percentage) || 0;
+
+      let lineTaxable = effectiveLine;
+      let lineTax = 0;
+      if (gstRate > 0) {
+        lineTaxable = Number((effectiveLine / (1 + gstRate / 100)).toFixed(2));
+        lineTax = Number((effectiveLine - lineTaxable).toFixed(2));
+      }
+      const lineCgst = Number((lineTax / 2).toFixed(2));
+      const lineSgst = Number((lineTax - lineCgst).toFixed(2));
+
+      totalTaxable += lineTaxable;
+      totalGst += lineTax;
+      totalCgst += lineCgst;
+      totalSgst += lineSgst;
+
+      const key = `${gstRate}%`;
+      if (!rateMap[key]) {
+        rateMap[key] = { rate: gstRate, taxable: 0, gst: 0, cgst: 0, sgst: 0 };
+      }
+      rateMap[key].taxable += lineTaxable;
+      rateMap[key].gst += lineTax;
+      rateMap[key].cgst += lineCgst;
+      rateMap[key].sgst += lineSgst;
+    });
+
+    return {
+      totalTaxable: Number(totalTaxable.toFixed(2)),
+      totalGst: Number(totalGst.toFixed(2)),
+      totalCgst: Number(totalCgst.toFixed(2)),
+      totalSgst: Number(totalSgst.toFixed(2)),
+      rateMap
+    };
+  }, [cart, totalSellingPrice, orderDiscountAmount, mrpDiff]);
 
   const handlePhoneChange = (val: string) => {
     let cleaned = val.replace(/[^\d+]/g, "");
@@ -487,9 +559,10 @@ export default function POS() {
 
       const payload: any = {
         customer_id: finalCustomerId,
-        total_amount: subtotal,
-        tax_amount: taxAmount,
-        discount_amount: discountAmount,
+        total_amount: effectiveBase,
+        tax_amount: cartTaxDetails.totalGst,
+        discount_amount: orderDiscountAmount,
+        discount_percent: effectiveDiscountPercent,
         round_off: roundOff,
         grand_total: grandTotal,
         payment_method: paymentMethod,
@@ -510,24 +583,53 @@ export default function POS() {
       setPrintSnapshot({
         cart: res.data.items && res.data.items.length > 0 ? res.data.items.map((it: any) => {
           const matchedCartItem = cart.find(c => c.product_id === it.product_id || c.batch_id === it.batch_id);
+          const mrpVal = Number(it.mrp ?? matchedCartItem?.mrp ?? it.unit_price);
+          const sellingPrice = Number(it.unit_price);
+          const qty = Number(it.quantity);
+          const gstPct = Number(it.gst_percentage ?? matchedCartItem?.gst_percentage ?? 0);
+          const taxable = Number(it.taxable_amount ?? (gstPct > 0 ? it.total_price / (1 + gstPct / 100) : it.total_price));
+          const gstAmt = Number(it.gst_amount ?? (it.total_price - taxable));
+          const mrpDisc = Math.max(0, (mrpVal * qty) - it.total_price);
+
           return {
             product_name: it.product_name || matchedCartItem?.product_name || "Medicine",
             batch_number: it.batch_number || matchedCartItem?.batch_number || "-",
+            hsn_code: it.hsn_code || matchedCartItem?.hsn_code || "-",
             quantity: it.quantity,
-            unit_price: Number(it.unit_price),
-            discount: Number(it.discount),
+            mrp: mrpVal,
+            unit_price: sellingPrice,
+            discount: mrpDisc,
+            gst_percentage: gstPct,
+            taxable_amount: taxable,
+            gst_amount: gstAmt,
             total_price: Number(it.total_price),
             is_loose: matchedCartItem?.is_loose,
             packs: matchedCartItem?.packs,
             loose_tablets: matchedCartItem?.loose_tablets,
             tablets_per_pack: matchedCartItem?.tablets_per_pack
           };
-        }) : [...cart],
-        subtotal: Number(res.data.total_amount ?? subtotal),
-        discountPercent,
-        discountAmount: Number(res.data.discount_amount ?? discountAmount),
-        taxPercent,
-        taxAmount: Number(res.data.tax_amount ?? taxAmount),
+        }) : cart.map((c: any) => {
+          const mrpVal = Number(c.mrp || c.unit_price);
+          const gstPct = Number(c.gst_percentage || 0);
+          const taxable = gstPct > 0 ? c.total_price / (1 + gstPct / 100) : c.total_price;
+          return {
+            ...c,
+            mrp: mrpVal,
+            hsn_code: c.hsn_code || "-",
+            gst_percentage: gstPct,
+            taxable_amount: taxable,
+            gst_amount: c.total_price - taxable,
+            discount: Math.max(0, (mrpVal * c.quantity) - c.total_price)
+          };
+        }),
+        totalMrp: Number(res.data.total_mrp ?? totalMrp),
+        totalMrpDiscount: Number(res.data.total_mrp_discount ?? mrpDiff),
+        subtotal: Number(res.data.total_amount ?? effectiveBase),
+        discountPercent: effectiveDiscountPercent,
+        discountAmount: Number(res.data.discount_amount ?? orderDiscountAmount),
+        taxableAmount: Number(res.data.taxable_amount ?? cartTaxDetails.totalTaxable),
+        taxAmount: Number(res.data.tax_amount ?? cartTaxDetails.totalGst),
+        taxBreakdown: res.data.tax_breakdown || cartTaxDetails.rateMap,
         roundOff: Number(res.data.round_off ?? roundOff),
         grandTotal: Number(res.data.grand_total ?? grandTotal),
         customerName: custName,
@@ -539,8 +641,7 @@ export default function POS() {
 
       setCompletedSale(res.data);
       setCart([]);
-      setDiscountPercent(0);
-      setTaxPercent(0);
+      setManualDiscountPercent(null);
       setWalkInName("");
       setWalkInPhone("");
       setMatchedCustomerId(null);
@@ -669,26 +770,39 @@ export default function POS() {
     doc.text(printSnapshot.customerName, 130, 60);
     doc.text(printSnapshot.customerPhone, 130, 66);
     
-    const tableData = printSnapshot.cart.map((item: any, index: number) => [
-      index + 1,
-      item.product_name,
-      item.batch_number,
-      item.is_loose 
+    const tableData = printSnapshot.cart.map((item: any, index: number) => {
+      const qtyStr = item.is_loose 
         ? `${item.packs || 0}p + ${item.loose_tablets || 0}t`
         : (typeof item.quantity === "number" && !Number.isInteger(item.quantity)
             ? item.quantity.toFixed(2)
-            : `${item.quantity}`),
-      `Rs. ${item.is_loose
+            : `${item.quantity}`);
+      const rateStr = `Rs. ${item.is_loose
         ? (item.unit_price / (item.tablets_per_pack || 1)).toFixed(2)
-        : item.unit_price.toFixed(2)}`,
-      `${printSnapshot.discountPercent}%`,
-      `${printSnapshot.taxPercent}%`,
-      `Rs. ${item.total_price.toFixed(2)}`
-    ]);
+        : item.unit_price.toFixed(2)}`;
+      const mrpStr = `Rs. ${Number(item.mrp || item.unit_price).toFixed(2)}`;
+      const discStr = Number(item.discount || 0) > 0 ? `Rs. ${Number(item.discount).toFixed(2)}` : "-";
+      const taxableStr = `Rs. ${Number(item.taxable_amount || 0).toFixed(2)}`;
+      const gstStr = `${item.gst_percentage || 0}%`;
+      const amountStr = `Rs. ${Number(item.total_price).toFixed(2)}`;
+
+      return [
+        index + 1,
+        item.product_name,
+        item.hsn_code || "-",
+        item.batch_number || "-",
+        qtyStr,
+        mrpStr,
+        rateStr,
+        discStr,
+        taxableStr,
+        gstStr,
+        amountStr
+      ];
+    });
 
     autoTable(doc, {
       startY: 79,
-      head: [["#", "Product", "Batch", "Qty", "Unit Price", "Discount", "Tax", "Total Price"]],
+      head: [["#", "Product", "HSN", "Batch", "Qty", "MRP", "Rate (Incl.)", "Disc.", "Taxable", "GST", "Amount"]],
       body: tableData,
       theme: 'grid',
       headStyles: { 
@@ -696,21 +810,24 @@ export default function POS() {
         textColor: 255, 
         fontStyle: 'bold',
         halign: 'left',
-        fontSize: 8.5
+        fontSize: 7.5
       },
       columnStyles: {
-        0: { halign: 'center', cellWidth: 8 },
-        1: { cellWidth: 54 },
-        2: { halign: 'center', cellWidth: 26 },
-        3: { halign: 'center', cellWidth: 14 },
-        4: { halign: 'right', cellWidth: 22 },
-        5: { halign: 'center', cellWidth: 18 },
-        6: { halign: 'center', cellWidth: 16 },
-        7: { halign: 'right', cellWidth: 24 },
+        0: { halign: 'center', cellWidth: 7 },
+        1: { cellWidth: 38 },
+        2: { halign: 'center', cellWidth: 14 },
+        3: { halign: 'center', cellWidth: 18 },
+        4: { halign: 'center', cellWidth: 14 },
+        5: { halign: 'right', cellWidth: 16 },
+        6: { halign: 'right', cellWidth: 18 },
+        7: { halign: 'right', cellWidth: 14 },
+        8: { halign: 'right', cellWidth: 16 },
+        9: { halign: 'center', cellWidth: 11 },
+        10: { halign: 'right', cellWidth: 16 },
       },
       styles: {
-        fontSize: 8,
-        cellPadding: 3,
+        fontSize: 7,
+        cellPadding: 2.5,
         textColor: [28, 30, 41]
       },
       alternateRowStyles: {
@@ -718,66 +835,113 @@ export default function POS() {
       }
     });
 
-    const finalY = (doc as any).lastAutoTable.finalY + 8;
+    const finalY = (doc as any).lastAutoTable.finalY + 6;
+    const boxWidth = 84;
+    const boxX = 112;
     
-    // Draw breakdown box
-    doc.setFillColor(247, 248, 252);
-    doc.setDrawColor(230, 231, 238);
-    doc.rect(120, finalY, 76, 36, "FD");
+    // Left summary notice: GST rate breakdown
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(67, 56, 202);
+    doc.text("GST TAX SUMMARY (INCLUSIVE IN MRP & SP)", 14, finalY + 5);
     
+    const breakdownEntries = Object.entries(printSnapshot.taxBreakdown || {});
+    let leftY = finalY + 10;
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
+    doc.setFontSize(7);
     doc.setTextColor(100, 116, 139);
     
-    // Row 1: Subtotal
-    doc.text("Subtotal:", 124, finalY + 6.5);
-    doc.text(`Rs. ${Number(printSnapshot.subtotal ?? 0).toFixed(2)}`, 192, finalY + 6.5, { align: "right" });
-    
-    // Row 2: Discount
-    doc.text(`Discount (${printSnapshot.discountPercent}%):`, 124, finalY + 13);
-    doc.text(`-Rs. ${Number(printSnapshot.discountAmount ?? 0).toFixed(2)}`, 192, finalY + 13, { align: "right" });
-    
-    // Row 3: Tax
-    doc.text(`Tax (${printSnapshot.taxPercent}%):`, 124, finalY + 19.5);
-    doc.text(`+Rs. ${Number(printSnapshot.taxAmount ?? 0).toFixed(2)}`, 192, finalY + 19.5, { align: "right" });
+    breakdownEntries.forEach(([rateLabel, data]: [string, any]) => {
+      const taxable = Number(data.taxable_amount ?? data.taxable ?? 0).toFixed(2);
+      const cgst = Number(data.cgst_amount ?? data.cgst ?? 0).toFixed(2);
+      const sgst = Number(data.sgst_amount ?? data.sgst ?? 0).toFixed(2);
+      const totalTax = Number(data.gst_amount ?? data.gst ?? 0).toFixed(2);
+      doc.text(`GST ${rateLabel}: Taxable Rs. ${taxable} | CGST Rs. ${cgst} + SGST Rs. ${sgst} = Rs. ${totalTax}`, 14, leftY);
+      leftY += 5;
+    });
 
-    // Row 4: Round Off
+    // Right Summary Box
+    const hasMrpSavings = Number(printSnapshot.totalMrp) > Number(printSnapshot.subtotal);
+    const hasOrderDisc = Number(printSnapshot.discountAmount || 0) > 0;
+    const boxHeight = 36 + (hasMrpSavings ? 10 : 0) + (hasOrderDisc ? 5 : 0);
+
+    doc.setFillColor(247, 248, 252);
+    doc.setDrawColor(230, 231, 238);
+    doc.rect(boxX, finalY, boxWidth, boxHeight, "FD");
+    
+    let curY = finalY + 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+
+    if (hasMrpSavings) {
+      doc.text("Total MRP:", boxX + 4, curY);
+      doc.text(`Rs. ${Number(printSnapshot.totalMrp).toFixed(2)}`, boxX + boxWidth - 4, curY, { align: "right" });
+      curY += 5;
+
+      doc.text("Total Savings (MRP Disc):", boxX + 4, curY);
+      doc.setTextColor(16, 185, 129);
+      doc.text(`-Rs. ${Number(printSnapshot.totalMrpDiscount).toFixed(2)}`, boxX + boxWidth - 4, curY, { align: "right" });
+      curY += 5;
+      doc.setTextColor(100, 116, 139);
+    }
+
+    doc.text("Subtotal (Incl. GST):", boxX + 4, curY);
+    doc.text(`Rs. ${Number(printSnapshot.subtotal ?? 0).toFixed(2)}`, boxX + boxWidth - 4, curY, { align: "right" });
+    curY += 5;
+
+    if (hasOrderDisc) {
+      doc.text(`Order Discount (${printSnapshot.discountPercent}%):`, boxX + 4, curY);
+      doc.setTextColor(244, 63, 94);
+      doc.text(`-Rs. ${Number(printSnapshot.discountAmount).toFixed(2)}`, boxX + boxWidth - 4, curY, { align: "right" });
+      curY += 5;
+      doc.setTextColor(100, 116, 139);
+    }
+
+    doc.text("Taxable Value:", boxX + 4, curY);
+    doc.text(`Rs. ${Number(printSnapshot.taxableAmount ?? 0).toFixed(2)}`, boxX + boxWidth - 4, curY, { align: "right" });
+    curY += 5;
+
+    doc.text("Total GST (Included):", boxX + 4, curY);
+    doc.text(`Rs. ${Number(printSnapshot.taxAmount ?? 0).toFixed(2)}`, boxX + boxWidth - 4, curY, { align: "right" });
+    curY += 5;
+
     const roundOffVal = Number(printSnapshot.roundOff ?? 0);
-    doc.text("Round Off:", 124, finalY + 26);
-    doc.text(`${roundOffVal >= 0 ? "+Rs. " : "-Rs. "}${Math.abs(roundOffVal).toFixed(2)}`, 192, finalY + 26, { align: "right" });
-    
-    // Draw a divider line
-    doc.setDrawColor(230, 231, 238);
-    doc.line(124, finalY + 28.5, 192, finalY + 28.5);
-    
-    // Row 5: Total Pay
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(67, 56, 202);
-    doc.text("Total Pay:", 124, finalY + 33);
-    doc.text(`Rs. ${Number(printSnapshot.grandTotal ?? 0).toFixed(2)}`, 192, finalY + 33, { align: "right" });
+    doc.text("Round Off:", boxX + 4, curY);
+    doc.text(`${roundOffVal >= 0 ? "+Rs. " : "-Rs. "}${Math.abs(roundOffVal).toFixed(2)}`, boxX + boxWidth - 4, curY, { align: "right" });
+    curY += 6;
 
     doc.setDrawColor(230, 231, 238);
-    doc.line(14, finalY + 45, 196, finalY + 45);
+    doc.line(boxX + 4, curY - 2, boxX + boxWidth - 4, curY - 2);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(67, 56, 202);
+    doc.text("Grand Total (Payable):", boxX + 4, curY + 2.5);
+    doc.text(`Rs. ${Number(printSnapshot.grandTotal ?? 0).toFixed(2)}`, boxX + boxWidth - 4, curY + 2.5, { align: "right" });
+
+    const termsY = Math.max(leftY + 6, finalY + boxHeight + 6);
+    doc.setDrawColor(230, 231, 238);
+    doc.line(14, termsY, 196, termsY);
     
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
     doc.setTextColor(107, 114, 128);
-    doc.text("TERMS & CONDITIONS:", 14, finalY + 42);
+    doc.text("TERMS & CONDITIONS:", 14, termsY + 4);
     
     doc.setFont("helvetica", "normal");
-    doc.text("1. Medicines once sold cannot be returned without a valid prescription/bill.", 14, finalY + 46);
-    doc.text("2. Please store medicines under recommended conditions.", 14, finalY + 50);
+    doc.text("1. Medicines once sold cannot be returned without a valid prescription/bill.", 14, termsY + 8);
+    doc.text("2. Please store medicines under recommended conditions.", 14, termsY + 12);
     
     const storeDisplayName = storeSettings?.store_name || "MedX Pharmacy";
     doc.setFont("helvetica", "bold");
     doc.setTextColor(67, 56, 202);
-    doc.setFontSize(10);
-    doc.text(`Thank you for choosing ${storeDisplayName}!`, 14, finalY + 58);
+    doc.setFontSize(9.5);
+    doc.text(`Thank you for choosing ${storeDisplayName}!`, 14, termsY + 19);
 
     // Bottom Footer Strip
     doc.setFillColor(67, 56, 202);
-    doc.rect(14, finalY + 62, 182, 1, "F");
+    doc.rect(14, termsY + 23, 182, 1, "F");
     
     doc.save(`Invoice_${printSnapshot.invoiceNumber}.pdf`);
   };
@@ -911,7 +1075,21 @@ export default function POS() {
                         </div>
 
                         <div className="text-right flex flex-col items-end gap-1">
-                          <div className="font-bold text-emerald-400 text-base">₹{Number(batch.selling_price || 0).toFixed(2)}</div>
+                          <div className="flex items-baseline gap-1.5 justify-end">
+                            {Number(batch.mrp || 0) > Number(batch.selling_price || 0) && (
+                              <span className="text-xs line-through text-slate-500 font-mono">
+                                ₹{Number(batch.mrp).toFixed(2)}
+                              </span>
+                            )}
+                            <span className="font-bold text-emerald-400 text-base font-mono">
+                              ₹{Number(batch.selling_price || 0).toFixed(2)}
+                            </span>
+                          </div>
+                          {Number(batch.mrp || 0) > Number(batch.selling_price || 0) && (
+                            <span className="text-[10px] text-emerald-400 font-medium font-mono">
+                              {(((Number(batch.mrp) - Number(batch.selling_price)) / Number(batch.mrp)) * 100).toFixed(0)}% off
+                            </span>
+                          )}
                           <Badge 
                             variant="outline" 
                             className={Number(batch.quantity_available || 0) <= 0
@@ -978,8 +1156,16 @@ export default function POS() {
                     <TableRow key={item.cart_id} className="border-slate-800 hover:bg-slate-800/50">
                       <TableCell>
                         <div className="font-medium text-slate-200">{item.product_name}</div>
-                        <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+                        <div className="text-xs text-slate-500 flex flex-wrap items-center gap-2 mt-0.5">
                           <span className="font-mono text-slate-400">Batch: {item.batch_number}</span>
+                          <span className="text-[10px] text-indigo-400 bg-indigo-500/10 px-1.5 py-0.2 rounded border border-indigo-500/20 font-mono font-semibold">
+                            {item.gst_percentage || 0}% GST
+                          </span>
+                          {item.mrp > item.unit_price && (
+                            <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20 font-mono">
+                              MRP ₹{item.mrp.toFixed(2)}
+                            </span>
+                          )}
                           {item.generic_name && (
                             <span className="text-indigo-400/80">• {item.generic_name}</span>
                           )}
@@ -1050,7 +1236,14 @@ export default function POS() {
                             <span className="text-[9px] text-slate-500">₹{item.unit_price.toFixed(2)}/pk</span>
                           </div>
                         ) : (
-                          <span>₹{item.unit_price.toFixed(2)}</span>
+                          <div className="flex flex-col text-xs">
+                            <span className="text-slate-200">₹{item.unit_price.toFixed(2)}</span>
+                            {item.mrp > item.unit_price ? (
+                              <span className="text-[10px] text-slate-400 line-through">MRP: ₹{item.mrp.toFixed(2)}</span>
+                            ) : (
+                              <span className="text-[10px] text-slate-500">MRP: ₹{item.mrp.toFixed(2)}</span>
+                            )}
+                          </div>
                         )}
                       </TableCell>
                       <TableCell className="font-bold text-emerald-400 font-mono">₹{item.total_price.toFixed(2)}</TableCell>
@@ -1192,44 +1385,70 @@ export default function POS() {
             {/* Totals & Checkout Button */}
             <div className="space-y-3 pt-3 shrink-0 border-t border-slate-800">
               <div className="space-y-2 text-xs">
-                <div className="flex justify-between text-slate-400">
-                  <span>Subtotal ({cart.length} items)</span>
-                  <span className="font-mono text-slate-200">₹{subtotal.toFixed(2)}</span>
+                <div className="flex justify-between text-slate-300">
+                  <span>{totalMrp > totalSellingPrice ? "Subtotal (MRP)" : "Subtotal"} ({cart.length} items)</span>
+                  <span className="font-mono font-semibold text-slate-100">₹{effectiveBase.toFixed(2)}</span>
                 </div>
                 
                 <div className="flex justify-between items-center text-slate-400">
-                  <div className="flex items-center gap-1.5">
-                    <span>Discount (</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span>Order Discount (</span>
                     <input 
                       type="number" 
+                      step="any"
                       min="0" 
                       max="100" 
-                      value={discountPercent || ""} 
-                      onChange={(e) => setDiscountPercent(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
-                      className="w-12 h-6 text-center bg-slate-950 border border-slate-700 rounded text-slate-200 text-xs px-1 font-mono focus:outline-none focus:border-indigo-500"
+                      value={
+                        manualDiscountPercent !== null 
+                          ? manualDiscountPercent 
+                          : (autoMrpDiscountPercent > 0 ? autoMrpDiscountPercent : "")
+                      } 
+                      placeholder={autoMrpDiscountPercent > 0 ? String(autoMrpDiscountPercent) : "0"}
+                      onChange={(e) => setManualDiscountPercent(e.target.value)}
+                      className="w-14 h-6 text-center bg-slate-950 border border-slate-700 rounded text-slate-200 text-xs px-1 font-mono focus:outline-none focus:border-indigo-500"
                     />
                     <span>%)</span>
+                    {manualDiscountPercent !== null && autoMrpDiscountPercent > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setManualDiscountPercent(null)}
+                        className="text-[10px] text-indigo-400 hover:text-indigo-300 font-medium px-1.5 py-0.5 rounded bg-indigo-950/60 border border-indigo-800/60 transition-colors cursor-pointer"
+                        title="Reset to MRP difference discount"
+                      >
+                        Auto
+                      </button>
+                    )}
                   </div>
-                  <span className="font-mono text-rose-400">-₹{discountAmount.toFixed(2)}</span>
+                  <span className="font-mono text-rose-400 font-medium">-₹{orderDiscountAmount.toFixed(2)}</span>
                 </div>
 
-                <div className="flex justify-between items-center text-slate-400">
-                  <div className="flex items-center gap-1.5">
-                    <span>Tax (</span>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      max="100" 
-                      value={taxPercent || ""} 
-                      onChange={(e) => setTaxPercent(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
-                      className="w-12 h-6 text-center bg-slate-950 border border-slate-700 rounded text-slate-200 text-xs px-1 font-mono focus:outline-none focus:border-indigo-500"
-                    />
-                    <span>%)</span>
+                {/* GST Tax Transparency Card */}
+                <div className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 space-y-1.5">
+                  <div className="flex justify-between text-[11px] text-slate-400">
+                    <span>Taxable Base Value:</span>
+                    <span className="font-mono font-medium text-slate-300">₹{cartTaxDetails.totalTaxable.toFixed(2)}</span>
                   </div>
-                  <span className="font-mono text-indigo-400">+₹{taxAmount.toFixed(2)}</span>
+                  <div className="flex justify-between text-[11px] text-slate-400">
+                    <span className="flex items-center gap-1 text-indigo-300">
+                      <span>GST (Included):</span>
+                      <span className="text-[10px] text-indigo-400/80">CGST+SGST</span>
+                    </span>
+                    <span className="font-mono font-semibold text-indigo-400">₹{cartTaxDetails.totalGst.toFixed(2)}</span>
+                  </div>
+
+                  {/* Multi-rate breakdown pills if items present */}
+                  {Object.keys(cartTaxDetails.rateMap).length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-1 border-t border-slate-800/80">
+                      {Object.entries(cartTaxDetails.rateMap).map(([rateKey, data]) => (
+                        <span key={rateKey} className="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">
+                          {rateKey}: ₹{data.gst.toFixed(2)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* Prominently displayed Round Off below Tax & Discount */}
+                {/* Round Off */}
                 <div className="flex justify-between items-center text-slate-400">
                   <span>Round Off</span>
                   <span className={`font-mono font-medium ${roundOff >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
@@ -1238,7 +1457,7 @@ export default function POS() {
                 </div>
 
                 <div className="flex justify-between items-baseline pt-2 border-t border-dashed border-slate-700">
-                  <span className="text-base font-bold text-slate-200">Total Pay</span>
+                  <span className="text-base font-bold text-slate-200">Total Pay (Incl. GST)</span>
                   <span className="text-2xl font-bold text-emerald-400 font-mono">₹{grandTotal.toFixed(2)}</span>
                 </div>
               </div>
